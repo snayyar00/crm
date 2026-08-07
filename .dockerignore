@@ -1,0 +1,14 @@
+# Keep the build context small and hermetic. Without this, `COPY . .` drags in the
+# host's node_modules (which are platform-linked) and the whole .git history.
+node_modules
+**/node_modules
+.git
+.turbo
+**/.turbo
+**/.next
+**/dist
+**/.eve
+.env
+.env.*
+!.env.example
+*.log
