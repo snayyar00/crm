@@ -31,6 +31,20 @@ RUN bun install --frozen-lockfile
 # Before the build, not after: `bun build --target=bun` INLINES process.env.NODE_ENV
 # into the bundle. Setting it afterwards bakes "development" in, which flips
 # Better Auth's secure-cookie behaviour at runtime with no visible error.
+# next.config.ts puts NEXT_PUBLIC_API_URL into `env`, which Next INLINES into the
+# client bundle at BUILD time. Without it the browser ships the fallback
+# "http://localhost:3001" and every call fails with "Could not reach the sign-in
+# service" — while the API itself is perfectly healthy.
+#
+# It must be exported as NEXT_PUBLIC_API_URL, not API_URL. apps/app/turbo.json's
+# build task declares env: ["NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_AUTH_URL"] and a
+# passThroughEnv list that does NOT include API_URL, so turbo strips API_URL out
+# of the build environment and next.config falls through to the localhost default.
+#
+# Coolify must mark API_URL as a BUILD variable so it arrives as --build-arg.
+ARG API_URL="http://localhost:3001"
+ENV NEXT_PUBLIC_API_URL=$API_URL
+
 ENV NODE_ENV=production
 
 RUN bun run build --filter=app
