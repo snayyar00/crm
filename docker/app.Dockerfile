@@ -7,8 +7,11 @@ FROM node:24-slim AS runtime
 
 # openssl: prisma's query engine links against it.
 # ca-certificates: outbound TLS from the api and the agent.
+# curl: Coolify's HTTP healthcheck shells out to curl or wget INSIDE the container.
+#       node:24-slim ships neither, so without this every deploy fails the health
+#       gate and rolls back with "/bin/sh: 1: curl: not found".
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && apt-get install -y --no-install-recommends openssl ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g bun@1.3.12
