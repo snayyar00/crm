@@ -49,20 +49,40 @@ deals.
 
 ## Domains
 
+Live as deployed:
+
 ```
-APP_URL             https://app.crm.webability.io
-API_URL             https://api.crm.webability.io
-AUTH_COOKIE_DOMAIN  .crm.webability.io
+APP_URL             https://app.crm.server.techywebsolutions.com
+API_URL             https://api.crm.server.techywebsolutions.com
+AUTH_COOKIE_DOMAIN  .crm.server.techywebsolutions.com
 ```
 
-The cookie parent is `.crm.webability.io` and must stay that specific. `.webability.io`
-would send this CRM's session cookie to every other production host on the domain.
+`*.server.techywebsolutions.com` is a DNS-only wildcard pointing straight at the host, and
+DNS wildcards match at any depth — so these names resolved with no record to add, and
+Traefik issues their Let's Encrypt certificates itself.
+
+The cookie parent is `.crm.server.techywebsolutions.com`, one level below the wildcard, so
+the session cookie does not reach the other staging hosts on that domain.
+
+### If you move to crm.webability.io
+
+Two things, and the first is not obvious:
+
+1. **Add real A records.** `*.webability.io` is a proxied wildcard that already answers for
+   `app.crm.webability.io`, so the name resolving proves nothing — it is the wildcard, and
+   it points at the wrong origin. Confirm with `dig` on a random sibling name: if
+   `random-abcd.crm.webability.io` answers too, no record exists.
+2. **Grey-cloud them.** Cloudflare's Universal SSL covers `webability.io` and
+   `*.webability.io` — one label only. A proxied `app.crm.webability.io` has no matching
+   edge certificate and dies with `ERR_SSL_VERSION_OR_CIPHER_MISMATCH` before Traefik is
+   ever reached. DNS-only sidesteps it; the alternative is an advanced certificate pack
+   covering `*.crm.webability.io`, which is how `*.pdf.webability.io` already works.
 
 OAuth redirect URIs go on the **API** origin, not the app's:
 
 ```
-https://api.crm.webability.io/api/auth/callback/google
-https://api.crm.webability.io/api/auth/callback/microsoft
+https://api.crm.server.techywebsolutions.com/api/auth/callback/google
+https://api.crm.server.techywebsolutions.com/api/auth/callback/microsoft
 ```
 
 ## Internal wiring
