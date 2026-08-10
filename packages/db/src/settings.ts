@@ -8,7 +8,7 @@ import {
 export const SETTINGS_ID = "app";
 
 export const DEFAULT_AGENT_MODEL = {
-	id: "zai/glm-5.2-fast",
+	id: "deepseek/deepseek-v4-flash",
 	contextWindowTokens: 1_000_000,
 } as const;
 

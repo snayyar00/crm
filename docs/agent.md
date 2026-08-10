@@ -11,7 +11,7 @@ are in `docs/setup.md`.
 
 ## Model
 
-Default `zai/glm-5.2-fast`; `DEFAULT_AGENT_MODEL` in `@crm/db/settings` because the
+Default `deepseek/deepseek-v4-flash`; `DEFAULT_AGENT_MODEL` in `@crm/db/settings` because the
 agent and the API both need it.
 
 - **A row (`AppSetting`), not an env var**, via `defineDynamic` on `session.started`.
