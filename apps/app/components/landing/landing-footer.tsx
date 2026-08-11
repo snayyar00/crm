@@ -39,11 +39,11 @@ export function LandingFooter() {
 						Built with love by
 						<Logo className="size-[13px] shrink-0 text-foreground" />
 						<Link
-							href="https://trycomp.ai?utm_source=crm_landing_footer&utm_medium=referral"
+							href="https://webability.io"
 							target="_blank"
 							className="font-medium text-foreground"
 						>
-							Comp AI
+							WebAbility
 						</Link>
 					</p>
 

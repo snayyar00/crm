@@ -14,8 +14,9 @@
 <h1 align="center">CRM</h1>
 
 <p align="center">
-  <strong>Comp AI CRM is an open source, CRM designed for AI agents.</strong><br>
-  Agentic-first CRM.
+  <strong>WebAbility CRM is an open source, CRM designed for AI agents.</strong><br>
+  Agentic-first CRM.<br>
+  A fork of <a href="https://github.com/trycompai/crm">trycompai/crm</a>.
 </p>
 
 <p align="center">
@@ -190,7 +191,7 @@ Written up where the work happens, not in a style guide:
 You need [Bun](https://bun.com) and Docker.
 
 ```sh
-git clone https://github.com/trycompai/crm.git && cd crm
+git clone https://github.com/snayyar00/crm.git && cd crm
 cp .env.example .env          # then fill in the values below
 bun install
 

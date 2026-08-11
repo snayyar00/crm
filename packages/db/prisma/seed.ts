@@ -586,7 +586,7 @@ async function seedDeals(
 					id,
 					name:
 						n === 0
-							? `${company.name} — Comp AI`
+							? `${company.name} — WebAbility`
 							: `${company.name} — expansion`,
 					description: pick(DEAL_DESCRIPTIONS),
 					companyId: company.id,
