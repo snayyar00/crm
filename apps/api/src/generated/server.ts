@@ -42,6 +42,7 @@ import type { FieldsRouter } from "../fields/fields.router";
 import type { GoogleRouter } from "../google/google.router";
 import type { MicrosoftRouter } from "../microsoft/microsoft.router";
 import type { ObligationsRouter } from "../obligations/obligations.router";
+import type { OpsRouter } from "../ops/ops.router";
 import type { SearchRouter } from "../search/search.router";
 import type { SettingsRouter } from "../settings/settings.router";
 import type { SsoRouter } from "../sso/sso.router";
@@ -374,6 +375,10 @@ const appRouter = t.router({
     startTrial: publicProcedure
       .input(obligationStartTrialInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ObligationsRouter["startTrial"]>>)
+    }),
+  ops: t.router({
+    crons: publicProcedure
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<OpsRouter["crons"]>>)
     }),
   search: t.router({
     quick: publicProcedure

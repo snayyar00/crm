@@ -25,6 +25,7 @@ import { logAuthRoute } from "./logging/request-logger.middleware";
 import { MailboxModule } from "./mailbox/mailbox.module";
 import { MicrosoftModule } from "./microsoft/microsoft.module";
 import { ObligationsModule } from "./obligations/obligations.module";
+import { OpsModule } from "./ops/ops.module";
 import { SearchModule } from "./search/search.module";
 import { SettingsModule } from "./settings/settings.module";
 import { SsoModule } from "./sso/sso.module";
@@ -57,6 +58,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		CurrencyModule,
 		DealsModule,
 		ObligationsModule,
+		OpsModule,
 		FieldsModule,
 		ActivitiesModule,
 		AgentModule,
