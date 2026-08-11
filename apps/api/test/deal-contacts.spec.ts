@@ -3,6 +3,7 @@ import { db } from "@crm/db";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DealsService } from "../src/deals/deals.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 import { FieldsService } from "../src/fields/fields.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "deal-contacts-spec";
@@ -15,6 +16,7 @@ const deals = new DealsService(
 	new ActivityStampService(db),
 	new ConversionService(db),
 	new FieldsService(db, { fieldBackfill: async () => undefined } as never),
+	new ObligationsService(db),
 );
 
 let companyId: string;

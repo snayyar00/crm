@@ -6,6 +6,7 @@ import {
 	Prisma as PrismaNamespace,
 } from "@crm/db";
 import { normalizeCurrency } from "@crm/db/currency";
+import { ObligationsService } from "../obligations/obligations.service";
 import {
 	CLOSED_DEAL_STAGES,
 	isClosedStage,
@@ -105,6 +106,7 @@ export class DealsService {
 		private readonly stamp: ActivityStampService,
 		private readonly conversion: ConversionService,
 		private readonly fields: FieldsService,
+		private readonly obligations: ObligationsService,
 	) {}
 
 	async list(input: DealListInput) {
@@ -422,6 +424,29 @@ export class DealsService {
 			from: deal.stage,
 			to: input.stage,
 		});
+
+		// A won audit deal carries five contractual obligations — report, VPAT/ACR,
+		// statement, verification, and the 6-month re-check. They are identical every
+		// time, which is exactly why they get forgotten: one signed deal here sat 23
+		// days with none of them started. Spawning them from the stage change is the
+		// only moment nobody has to remember anything.
+		//
+		// Deliberately OUTSIDE the transaction above and swallowed on failure: the
+		// stage change is the user's action and must not roll back because a
+		// follow-up task could not be written. spawnForWonDeal is idempotent, so a
+		// missed spawn is recoverable by re-running it.
+		if (input.stage === "CLOSED_WON") {
+			try {
+				const spawned = await this.obligations.spawnForWonDeal(deal.id, actingUserId);
+				this.logger.log({ message: "Spawned won-deal obligations", dealId: deal.id, ...spawned });
+			} catch (err) {
+				this.logger.error({
+					message: "Could not spawn won-deal obligations — the stage change stands",
+					dealId: deal.id,
+					detail: err instanceof Error ? err.message : String(err),
+				});
+			}
+		}
 
 		return { ...updated, changed: true };
 	}

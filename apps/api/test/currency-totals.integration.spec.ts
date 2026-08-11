@@ -6,6 +6,7 @@ import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DashboardService } from "../src/dashboard/dashboard.service";
 import { DealsService } from "../src/deals/deals.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 import { FieldsService } from "../src/fields/fields.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "currency-totals-spec";
@@ -18,6 +19,7 @@ const deals = new DealsService(
 	new ActivityStampService(db),
 	conversion,
 	new FieldsService(db, { fieldBackfill: async () => undefined } as never),
+	new ObligationsService(db),
 );
 const dashboard = new DashboardService(db, conversion);
 
