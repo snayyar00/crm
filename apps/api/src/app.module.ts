@@ -17,6 +17,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { DatabaseModule } from "./database/database.module";
 import { EmailModule } from "./email/email.module";
 import { DealsModule } from "./deals/deals.module";
+import { ObligationsModule } from "./obligations/obligations.module";
 import { FieldsModule } from "./fields/fields.module";
 import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
@@ -55,6 +56,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		ConversationsModule,
 		CurrencyModule,
 		DealsModule,
+		ObligationsModule,
 		FieldsModule,
 		ActivitiesModule,
 		AgentModule,
