@@ -170,3 +170,34 @@ A send that succeeds writes an `EMAIL` Activity against whichever of
 so a reply sent this way opens a new conversation on the recipient's side and never appears in
 the sender's Gmail sent folder. Use it for new outbound and automation; use the `gog` CLI for
 replies to live conversations.
+
+## The obligation alarm
+
+Every stalled deal here stalled because we promised an artifact and never sent it —
+an invoice 23 days after a signed SOW, an agreement 34 days after the buyer said yes.
+Winning a deal now spawns its five contractual obligations automatically, and this
+route is what makes them visible.
+
+```
+OBLIGATION_DIGEST_TO   required — the founder's address. No default: the route
+                       refuses rather than guess a recipient.
+```
+
+Schedule it as a morning task on the api resource, same bearer contract as the others:
+
+```sh
+curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  https://api.crm.server.techywebsolutions.com/internal/sync/obligations
+```
+
+**A quiet run is the expected outcome.** It returns `{ sent: false, reason: "clean" }`
+on any day with nothing overdue or due within three days, and sends no mail at all.
+That silence is the design: an alarm that arrives every morning with "due in 14 days"
+teaches you inside a week that it is skippable, and then the one carrying a
+23-day-overdue signed contract gets archived with the rest.
+
+It enqueues as QUEUED rather than DRAFT — the only place in this system that bypasses
+the human-release gate. That gate exists so a human approves outbound CUSTOMER mail;
+this is internal mail to the founder, and requiring him to release it to himself would
+deadlock on the exact inattention it is built to fix. The recipient is pinned from
+`OBLIGATION_DIGEST_TO` in the controller so the bypass can never address a customer.

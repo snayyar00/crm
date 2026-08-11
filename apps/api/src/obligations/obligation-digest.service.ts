@@ -111,6 +111,16 @@ export class ObligationDigestService {
 	}
 
 	/**
+	 * The install owner — this is single-tenant, so the first user IS the founder.
+	 * Used as the EmailJob author; the alarm has no other sensible attribution.
+	 */
+	async ownerId(): Promise<string> {
+		const user = await this.db.user.findFirst({ orderBy: { createdAt: "asc" } });
+		if (!user) throw new Error("No user exists — cannot attribute the obligation alarm.");
+		return user.id;
+	}
+
+	/**
 	 * Enqueues the alarm if there is one. Returns what it did so a caller (cron,
 	 * test) can assert on it rather than reading logs.
 	 */
