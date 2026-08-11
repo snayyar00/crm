@@ -55,8 +55,29 @@ export class ObligationsService {
 	}
 
 	/**
-	 * Idempotent by (dealId, kind, title): re-running a spawn never duplicates.
-	 * Deliberate — this is called from a deal event that can fire more than once.
+	 * Idempotent by (kind, title, scope) — re-running a spawn never duplicates.
+	 * This is called from a deal event that can fire more than once.
+	 *
+	 * SCOPE is the company when there is one, and only otherwise the deal. That
+	 * asymmetry is the fix for a real duplicate: the old key was
+	 * `{ type, subject, dealId: input.dealId ?? undefined }`, and in Prisma an
+	 * `undefined` filter is OMITTED rather than matched against NULL. So recording
+	 * a trial before its deal existed and again after it was linked produced TWO
+	 * clocks for one trial — the second lookup filtered on `dealId: <id>`, matched
+	 * nothing, and created a duplicate. Reproduced before fixing:
+	 *
+	 *     call 1 created: true | call 2 created: true
+	 *     TRIAL_EXPIRY rows for one trial: 2
+	 *        deal=null         due=2026-08-31  Trial expires — REPRO-CO
+	 *        deal=repro-deal   due=2026-08-31  Trial expires — REPRO-CO
+	 *
+	 * Company-first is right because an obligation belongs to the ACCOUNT: a trial
+	 * does not become a different trial when a deal is attached to it. Deals stay
+	 * distinguishable anyway because every per-deal title embeds the deal name
+	 * ("Audit report — Hook Proof — WCAG audit").
+	 *
+	 * `kind` is now actually part of the key. The old doc comment claimed it was
+	 * and the query never used it.
 	 */
 	private async ensure(input: {
 		kind: ObligationKind;
@@ -67,13 +88,34 @@ export class ObligationsService {
 		companyId?: string;
 		createdById: string;
 	}) {
+		// Written as an explicit null, never `undefined` — see above.
+		const scope = input.companyId
+			? { companyId: input.companyId }
+			: { dealId: input.dealId ?? null };
 		const existing = await this.db.activity.findFirst({
-			where: { type: "TASK", subject: input.title, dealId: input.dealId ?? undefined },
+			where: {
+				type: "TASK",
+				subject: input.title,
+				meta: { path: ["obligationKind"], equals: input.kind },
+				...scope,
+			},
 		});
 		// Report creation explicitly. Inferring it from `createdAt > now - 5s` looked
 		// right and was wrong: a re-run inside that window counted existing rows as new,
 		// so an idempotency check reported 5 created when it had created none.
-		if (existing) return { row: existing, created: false };
+		if (existing) {
+			// A later call may know something the first did not — most often the deal
+			// this obligation belongs to. Attach it rather than dropping it on the
+			// floor, but never overwrite a link that already exists.
+			if (input.dealId && !existing.dealId) {
+				const linked = await this.db.activity.update({
+					where: { id: existing.id },
+					data: { dealId: input.dealId },
+				});
+				return { row: linked, created: false };
+			}
+			return { row: existing, created: false };
+		}
 
 		const row = await this.db.activity.create({
 			data: {
