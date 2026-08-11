@@ -153,7 +153,8 @@ export class ObligationDigestService {
 				!(
 					r.deal?.engagementType === "AUDIT" &&
 					!r.deal?.workStartedAt &&
-					this.kindOf(r) !== "TRIAL_EXPIRY"
+					this.kindOf(r) !== "TRIAL_EXPIRY" &&
+					this.kindOf(r) !== "COMMITMENT"
 				),
 		);
 		if (obligations.length === 0) return null;

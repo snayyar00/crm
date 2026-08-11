@@ -27,7 +27,12 @@ export type ObligationKind =
 	| "RECHECK_DUE"
 	| "VPAT_EXPIRY"
 	| "DELIVERABLE_DUE"
-	| "LEGAL_DEADLINE";
+	| "LEGAL_DEADLINE"
+	/** Something WE owe the customer straight after the win, which nothing else
+	 *  can proceed without. Distinct from DELIVERABLE_DUE: a deliverable is the
+	 *  work itself and waits on the customer; a commitment is what unblocks them
+	 *  and waits on nobody. */
+	| "COMMITMENT";
 
 /**
  * The five deliverables every audit engagement contractually includes.
@@ -46,6 +51,27 @@ const AUDIT_DELIVERABLES = [
 	},
 	{ slug: "statement", title: "Accessibility statement", offsetDays: 21 },
 	{ slug: "verification", title: "Remediation verification", offsetDays: 45 },
+] as const;
+
+/**
+ * What WE owe immediately after winning an audit, and what the engagement cannot
+ * move without.
+ *
+ * These exist because of a real 26-day hole. Questback signed on 2026-07-14; the
+ * tasks "Send Questback invoice" and "Send Questback intake questionnaire" were
+ * only CREATED on 2026-08-09 and the mail went out on 08-10. For 26 days nothing
+ * in the system knew we owed anything — the five contractual deliverables had
+ * spawned and were quietly counting down against work that could not start.
+ *
+ * Dated from the WIN, not from workStartedAt: they are what makes work start.
+ */
+const KICKOFF_COMMITMENTS = [
+	{ slug: "send-invoice", title: "Send the invoice", offsetDays: 2 },
+	{
+		slug: "send-intake",
+		title: "Send the intake questionnaire",
+		offsetDays: 2,
+	},
 ] as const;
 
 /** Contractual re-check interval for audit engagements. */
@@ -69,6 +95,10 @@ export const LEAD_DAYS: Record<ObligationKind, number> = {
 	VPAT_EXPIRY: 21,
 	LEGAL_DEADLINE: 14,
 	DELIVERABLE_DUE: 3,
+	// Two days, so it is urgent on the day the deal is won. That is the point:
+	// the whole failure this models happened in the window before anyone thought
+	// to write the task down.
+	COMMITMENT: 2,
 };
 /** An unknown kind gets the TIGHTEST window — a new kind should under-alarm
  *  until someone gives it a considered lead time, not spam. */
@@ -300,6 +330,28 @@ export class ObligationsService {
 			deal.workStartedAt ?? deal.closedAt ?? deal.stageChangedAt ?? new Date();
 		let created = 0;
 
+		// What we owe them, first — dated from the WIN, because these are what let
+		// the work begin at all. Deliberately NOT anchored to workStartedAt: waiting
+		// for the customer to start before reminding ourselves to send the intake
+		// would be circular, and that circle is exactly how 26 days went missing.
+		for (const c of KICKOFF_COMMITMENTS) {
+			const row = await this.ensure({
+				kind: "COMMITMENT",
+				slug: c.slug,
+				scope: "deal",
+				title: `${c.title} — ${deal.name}`,
+				body: `Owed to ${deal.name} right after the win. Nothing else on this engagement can move until it is sent.`,
+				dueAt: this.addDays(
+					deal.closedAt ?? deal.stageChangedAt ?? new Date(),
+					c.offsetDays,
+				),
+				dealId: deal.id,
+				companyId: deal.companyId,
+				createdById,
+			});
+			if (row.created) created += 1;
+		}
+
 		for (const d of AUDIT_DELIVERABLES) {
 			const row = await this.ensure({
 				kind: "DELIVERABLE_DUE",
@@ -506,10 +558,14 @@ export class ObligationsService {
 				// close date and is re-derived the moment work starts, so reporting it
 				// as overdue blames us for their silence — the same mistake that got
 				// the 5-day seller-silence detector cut.
+				// A COMMITMENT is ours and is what ENDS the waiting, so it must never be
+				// filed under "waiting on the customer" — that would hide the exact task
+				// whose absence caused the delay.
 				const awaitingStart =
 					r.deal?.engagementType === "AUDIT" &&
 					!r.deal?.workStartedAt &&
-					kind !== "TRIAL_EXPIRY";
+					kind !== "TRIAL_EXPIRY" &&
+					kind !== "COMMITMENT";
 				return {
 					...r,
 					kind,
