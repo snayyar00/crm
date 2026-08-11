@@ -31,6 +31,13 @@ if (env.google) {
 
 		accessType: "offline",
 
+		// Google returns a refresh token only on an account's FIRST grant unless
+		// consent is forced. Without this, any account that has authorised the app
+		// before — including one whose earlier attempt failed *after* Google
+		// recorded the grant — signs in with an access token that dies in an hour
+		// and can never be renewed, so its mailbox silently stops syncing.
+		prompt: "consent",
+
 		...(googleHostedDomain() ? { hd: googleHostedDomain() } : {}),
 	};
 }
