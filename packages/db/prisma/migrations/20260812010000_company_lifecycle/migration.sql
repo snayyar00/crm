@@ -1,0 +1,24 @@
+-- Tell customers, prospects and competitors apart.
+--
+-- Measured 2026-08-11, read-only against both production and this CRM:
+--   distinct PAYING site domains in production (is_active=1, is_trial=0): 1,740
+--   companies in this CRM:                                                  94
+--   of those with a domain set:                                             85
+--   paying domains that exist as a CRM company:                              9
+-- Domain formats were checked on both sides before believing that 9 (both store
+-- bare apex domains; 1 of 1,740 carries a www/protocol prefix), so it is a real
+-- gap and not a join artifact.
+--
+-- Two of the 94 are competitors (accessibleweb.com, allyant.com). With no field
+-- separating them, every list mixes competitors, prospects and customers — which
+-- is why "which of my customers went dark?" needed a cross-database script rather
+-- than a filter.
+--
+-- NULLABLE with no default: the existing 94 rows have not been classified, and
+-- guessing would be worse than an honest unknown.
+--
+-- NOTE: company already has `source RecordSource @default(MANUAL)`. This migration
+-- deliberately does NOT add a second provenance column — the first draft did, hit
+-- Postgres 42701 (duplicate column), and was wrong to have tried.
+CREATE TYPE "CompanyLifecycle" AS ENUM ('PROSPECT', 'CUSTOMER', 'COMPETITOR', 'CHURN_WATCH', 'PARTNER', 'OTHER');
+ALTER TABLE "company" ADD COLUMN "lifecycle" "CompanyLifecycle";

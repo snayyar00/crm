@@ -127,6 +127,29 @@ enum DealStage {
 /// (which carries none). Without it, winning ANY deal spawned five audit
 /// obligations: on the real book that is 15 false against 5 true, and this
 /// product's alarm only works while it is believed.
+/// What a company IS to this business.
+///
+/// Added because the CRM could not answer it. Measured 2026-08-11: production has
+/// 1,740 distinct paying site domains; the CRM holds 94 companies, of which 9 are
+/// paying customers and at least two (accessibleweb.com, allyant.com) are
+/// COMPETITORS. Prospects, competitors and customers were indistinguishable, which
+/// is what turned "which of my customers went dark?" into a research project
+/// instead of a filter.
+///
+/// Deliberately NOT a reason to import all 1,740. Production MySQL is already the
+/// customer database and a second copy can only disagree with it. Companies enter
+/// this CRM when there is a reason to TOUCH them; this field records which reason.
+enum CompanyLifecycle {
+  PROSPECT
+  CUSTOMER
+  COMPETITOR
+  /// A paying customer whose widget stopped reporting — here to be acted on, not
+  /// to be catalogued.
+  CHURN_WATCH
+  PARTNER
+  OTHER
+}
+
 enum EngagementType {
   AUDIT
   SUBSCRIPTION
@@ -235,6 +258,7 @@ model Company {
   id          String  @id @default(cuid())
   name        String
   domain      String? @unique
+  lifecycle   CompanyLifecycle?
   website     String?
   description String?
 
