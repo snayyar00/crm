@@ -263,6 +263,18 @@ export class ObligationsService {
 		const deal = await this.db.deal.findUnique({ where: { id: dealId } });
 		if (!deal) return { created: 0, reason: "no such deal" };
 
+		// Only an AUDIT carries these. Winning a widget subscription carries no
+		// audit report, no VPAT and no 6-month re-check, and spawning them anyway
+		// was the state of this code until 2026-08-11: on the real book, 3 of the 4
+		// won deals are not audits, so it would have produced 15 phantom
+		// obligations against 5 true ones. The alarm is only useful while it is
+		// believed, which makes a false positive strictly worse than a miss —
+		// missing a checklist risks one late deliverable on a signed SOW the
+		// founder wrote himself; a lying alarm loses every deal it protects.
+		if (deal.engagementType !== "AUDIT") {
+			return { created: 0, reason: `not an audit engagement (${deal.engagementType ?? "unset"})` };
+		}
+
 		const from = deal.closedAt ?? deal.stageChangedAt ?? new Date();
 		let created = 0;
 

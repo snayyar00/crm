@@ -74,6 +74,14 @@ export const setStageInput = z.object({
 	id: z.string(),
 	stage: stageEnum,
 	closedReason: z.string().trim().optional(),
+	/**
+	 * Required when closing a deal as WON and the deal does not already carry one.
+	 * Symmetric with `closedReason` on a loss: the CRM refuses to record an
+	 * outcome it cannot interpret. Winning an AUDIT creates five contractual
+	 * clocks; winning a SUBSCRIPTION creates none, and guessing wrong invents
+	 * deadlines that do not exist.
+	 */
+	engagementType: z.enum(["AUDIT", "SUBSCRIPTION", "OTHER"]).optional(),
 });
 
 export type SetStageInput = z.infer<typeof setStageInput>;

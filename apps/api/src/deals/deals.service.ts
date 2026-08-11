@@ -367,7 +367,7 @@ export class DealsService {
 	async setStage(input: SetStageInput, actingUserId: string) {
 		const deal = await this.db.deal.findUnique({
 			where: { id: input.id },
-			select: { id: true, stage: true, companyId: true },
+			select: { id: true, stage: true, companyId: true, engagementType: true },
 		});
 
 		if (!deal) {
@@ -385,6 +385,19 @@ export class DealsService {
 			);
 		}
 
+		// The winning mirror of the rule above. An audit engagement carries five
+		// contractual deliverables and a 6-month re-check; a subscription carries
+		// none. Nothing else in the schema distinguishes them, so closing a deal as
+		// won while this is unknown would either invent deadlines or silently drop
+		// real ones. Asked here because this is a transition the founder already
+		// performs — a separate optional control would simply never be used.
+		const engagementType = input.engagementType ?? deal.engagementType ?? null;
+		if (input.stage === "CLOSED_WON" && !engagementType) {
+			throw new BadRequestException(
+				"Say what kind of engagement this was — an audit spawns five contractual deliverables and a 6-month re-check, a subscription spawns none.",
+			);
+		}
+
 		const now = new Date();
 		const closed = isClosedStage(input.stage);
 
@@ -393,6 +406,7 @@ export class DealsService {
 				where: { id: input.id },
 				data: {
 					stage: input.stage,
+					...(engagementType ? { engagementType } : {}),
 					stageChangedAt: now,
 					closedAt: closed ? now : null,
 					closedReason: closed ? (closedReason ?? null) : null,

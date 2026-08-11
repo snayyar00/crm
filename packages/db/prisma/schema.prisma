@@ -120,6 +120,19 @@ enum DealStage {
   CLOSED_LOST
 }
 
+/// What kind of engagement a deal represents.
+///
+/// Added because nothing in the schema distinguished a WCAG audit (which carries
+/// contractual deliverables and a 6-month re-check) from a widget subscription
+/// (which carries none). Without it, winning ANY deal spawned five audit
+/// obligations: on the real book that is 15 false against 5 true, and this
+/// product's alarm only works while it is believed.
+enum EngagementType {
+  AUDIT
+  SUBSCRIPTION
+  OTHER
+}
+
 enum ActivityType {
   NOTE
   CALL
@@ -841,6 +854,10 @@ model Deal {
   owner         User                @relation("DealOwner", fields: [ownerId], references: [id])
 
   stage             DealStage @default(DEMO_BOOKED)
+  /// Nullable, and deliberately has NO default — a default of AUDIT would be
+  /// wrong 3 times in 4, and its error mode is inventing contractual deadlines.
+  /// setStage refuses to close a deal as WON until this is known.
+  engagementType    EngagementType?
   stageChangedAt    DateTime  @default(now())
   amount            Decimal?  @db.Decimal(14, 2)
   currency          String    @default("USD")
