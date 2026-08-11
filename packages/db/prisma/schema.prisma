@@ -1023,6 +1023,15 @@ model Activity {
   createdBy   User   @relation("ActivityAuthor", fields: [createdById], references: [id])
   meta        Json?
 
+  /// The outbound message this obligation was extracted from — set when a TASK
+  /// is created because we PROMISED something in an email. Lets the UI quote the
+  /// promise back, and makes promise-to-delivery lag measurable later without a
+  /// separate Commitment table (an obligation is a TASK; a second list nobody
+  /// opens is how the first list stopped being drained).
+  sourceMessageId String?
+  /// The queued email that satisfied this obligation, once one exists.
+  deliveredByEmailJobId String?
+
   emailThreadId   String?        @unique
   emailThread     EmailThread?   @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
   calendarEventId String?        @unique
