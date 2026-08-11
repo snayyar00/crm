@@ -385,15 +385,27 @@ export class DealsService {
 			// not a no-op, and it spawns exactly what the original win would have.
 			// Still guarded: only CLOSED_WON, only when a type is actually supplied,
 			// and only when it CHANGES something.
-			if (
-				input.stage === "CLOSED_WON" &&
-				input.engagementType &&
-				input.engagementType !== deal.engagementType
-			) {
-				await this.db.deal.update({
-					where: { id: input.id },
-					data: { engagementType: input.engagementType },
-				});
+			if (input.stage === "CLOSED_WON" && input.engagementType) {
+				// Deliberately fires even when the type is UNCHANGED. Naming the
+				// engagement type is what derives the contractual clocks, so restating
+				// it RECONCILES them against the deal as it stands now.
+				//
+				// That matters because the dates hang off `closedAt`. Questback was
+				// recorded as won on 8 Aug but its SOW was signed on 14 July, so every
+				// obligation was three and a half weeks optimistic; correcting the date
+				// left no way to re-derive them, and the only route was to cycle the
+				// type through OTHER and back. An operation that exists only as a
+				// workaround is not an operation.
+				//
+				// Safe to repeat: ensure() is idempotent on the obligation key, so this
+				// either re-dates a row whose due date moved or does nothing at all. It
+				// never duplicates — the partial unique index would reject that anyway.
+				if (input.engagementType !== deal.engagementType) {
+					await this.db.deal.update({
+						where: { id: input.id },
+						data: { engagementType: input.engagementType },
+					});
+				}
 				let spawned: unknown = null;
 				try {
 					spawned = await this.obligations.spawnForWonDeal(
@@ -409,9 +421,10 @@ export class DealsService {
 					});
 				}
 				this.logger.log({
-					message: "Engagement type recorded on an already-won deal",
+					message: "Obligations reconciled on an already-won deal",
 					dealId: deal.id,
 					engagementType: input.engagementType,
+					typeChanged: input.engagementType !== deal.engagementType,
 					spawned,
 				});
 				return {
@@ -419,6 +432,7 @@ export class DealsService {
 					stage: deal.stage,
 					changed: false,
 					engagementTypeSet: input.engagementType,
+					obligationsReconciled: true,
 				};
 			}
 			return { id: deal.id, stage: deal.stage, changed: false };
