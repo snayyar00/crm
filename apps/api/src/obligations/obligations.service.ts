@@ -25,12 +25,19 @@ export type ObligationKind =
 	| "DELIVERABLE_DUE"
 	| "LEGAL_DEADLINE";
 
-/** The five deliverables every audit engagement contractually includes. */
+/**
+ * The five deliverables every audit engagement contractually includes.
+ *
+ * `slug` is the IDENTITY; `title` is only what a human reads. They must stay
+ * separate because the title embeds the deal name, and a deal can be renamed —
+ * keying identity on the title meant a rename plus a re-fire of the CLOSED_WON
+ * hook produced five duplicate obligations. Never derive a slug from a title.
+ */
 const AUDIT_DELIVERABLES = [
-	{ title: "Audit report", offsetDays: 14 },
-	{ title: "VPAT / Accessibility Conformance Report", offsetDays: 21 },
-	{ title: "Accessibility statement", offsetDays: 21 },
-	{ title: "Remediation verification", offsetDays: 45 },
+	{ slug: "audit-report", title: "Audit report", offsetDays: 14 },
+	{ slug: "vpat", title: "VPAT / Accessibility Conformance Report", offsetDays: 21 },
+	{ slug: "statement", title: "Accessibility statement", offsetDays: 21 },
+	{ slug: "verification", title: "Remediation verification", offsetDays: 45 },
 ] as const;
 
 /** Contractual re-check interval for audit engagements. */
@@ -79,8 +86,30 @@ export class ObligationsService {
 	 * `kind` is now actually part of the key. The old doc comment claimed it was
 	 * and the query never used it.
 	 */
+	/**
+	 * The stable identity of one obligation. Contains no human-readable text, so
+	 * renaming a deal or rewording a title cannot mint a duplicate.
+	 *
+	 * Scope is stated by the CALLER, not inferred from which id happens to be
+	 * present: a won-deal deliverable belongs to its DEAL (one company can hold
+	 * two audit engagements), while a trial belongs to the ACCOUNT (attaching a
+	 * deal later must not make it a different trial).
+	 */
+	private obligationKey(input: {
+		kind: ObligationKind;
+		slug: string;
+		scope: "deal" | "company";
+		dealId?: string;
+		companyId?: string;
+	}): string {
+		const id = input.scope === "deal" ? input.dealId : input.companyId;
+		return `${input.kind}:${input.slug}:${input.scope}_${id ?? "none"}`;
+	}
+
 	private async ensure(input: {
 		kind: ObligationKind;
+		slug: string;
+		scope: "deal" | "company";
 		title: string;
 		body: string;
 		dueAt: Date;
@@ -88,38 +117,27 @@ export class ObligationsService {
 		companyId?: string;
 		createdById: string;
 	}) {
-		// Written as an explicit null, never `undefined` — see above.
-		const scope = input.companyId
-			? { companyId: input.companyId }
-			: { dealId: input.dealId ?? null };
+		const key = this.obligationKey(input);
 		const existing = await this.db.activity.findFirst({
 			where: {
 				type: "TASK",
-				subject: input.title,
-				meta: { path: ["obligationKind"], equals: input.kind },
+				meta: { path: ["obligationKey"], equals: key },
 				// OPEN clocks only. A completed obligation is a SATISFIED clock, and
 				// letting it match would silently swallow the next one: a second trial
-				// a year later has the same title, kind and company as the first, so it
-				// would find the closed row, report created:false, and leave the new
-				// expiry with nothing watching it. Silent, and invisible on a board that
-				// hides completed tasks — the exact failure this module exists to stop.
+				// a year later carries the same key as the first, so it would find the
+				// closed row, report created:false, and leave the new expiry with
+				// nothing watching it. Invisible on a board that hides completed tasks.
 				completedAt: null,
-				...scope,
 			},
-			// findFirst with no order is nondeterministic, and pre-fix duplicates still
-			// exist in the table. Oldest wins so the choice is at least stable.
+			// findFirst with no order is nondeterministic and pre-key duplicates may
+			// still exist. Oldest wins so the choice is at least stable.
 			orderBy: { occurredAt: "asc" },
 		});
-		// Report creation explicitly. Inferring it from `createdAt > now - 5s` looked
-		// right and was wrong: a re-run inside that window counted existing rows as new,
-		// so an idempotency check reported 5 created when it had created none.
-		// Company scope can surface a row belonging to a DIFFERENT deal. That is not
-		// this spawn's obligation, and returning it would silently alias two deals'
-		// clocks together — so fall through and create.
-		const aliasesAnotherDeal =
-			!!existing?.dealId && !!input.dealId && existing.dealId !== input.dealId;
 
-		if (existing && !aliasesAnotherDeal) {
+		// The deal-alias guard that used to live here is gone on purpose: the key
+		// itself now carries the scope, so a row belonging to another deal has a
+		// different key and can no longer be returned as this spawn's.
+		if (existing) {
 			// A repeat call can know things the first did not: the deal this obligation
 			// belongs to, or a new date because the trial was extended. Silently keeping
 			// a stale dueAt is worse than duplicating — a duplicate is noise the founder
@@ -139,7 +157,40 @@ export class ObligationsService {
 			return { row: existing, created: false, updated: false };
 		}
 
-		const row = await this.db.activity.create({
+		try {
+			return { row: await this.create(input, key), created: true, updated: false };
+		} catch (err) {
+			// P2002 = the partial unique index on meta->>'obligationKey' rejected us,
+			// which means a concurrent spawn (cron vs a manual call) won the race
+			// between our findFirst and this insert. That is the index doing its job;
+			// re-read and report the row as found, not created.
+			if ((err as { code?: string }).code !== "P2002") throw err;
+			const raced = await this.db.activity.findFirst({
+				where: {
+					type: "TASK",
+					meta: { path: ["obligationKey"], equals: key },
+					completedAt: null,
+				},
+			});
+			if (!raced) throw err;
+			this.logger.log({ message: "Obligation lost an insert race; reused the winner", key });
+			return { row: raced, created: false, updated: false };
+		}
+	}
+
+	private async create(
+		input: {
+			kind: ObligationKind;
+			title: string;
+			body: string;
+			dueAt: Date;
+			dealId?: string;
+			companyId?: string;
+			createdById: string;
+		},
+		key: string,
+	) {
+		return this.db.activity.create({
 			data: {
 				type: "TASK",
 				subject: input.title,
@@ -149,10 +200,13 @@ export class ObligationsService {
 				dealId: input.dealId,
 				companyId: input.companyId,
 				createdById: input.createdById,
-				meta: { obligationKind: input.kind, spawnedBy: "obligations.service" },
+				meta: {
+					obligationKind: input.kind,
+					obligationKey: key,
+					spawnedBy: "obligations.service",
+				},
 			},
 		});
-		return { row, created: true, updated: false };
 	}
 
 	/**
@@ -170,6 +224,8 @@ export class ObligationsService {
 		for (const d of AUDIT_DELIVERABLES) {
 			const row = await this.ensure({
 				kind: "DELIVERABLE_DUE",
+				slug: d.slug,
+				scope: "deal",
 				title: `${d.title} — ${deal.name}`,
 				body: `Contractual deliverable for ${deal.name}. Due ${d.offsetDays} days from close.`,
 				dueAt: this.addDays(from, d.offsetDays),
@@ -184,6 +240,8 @@ export class ObligationsService {
 		// to lose — it falls due six months after everyone has moved on.
 		const recheck = await this.ensure({
 			kind: "RECHECK_DUE",
+			slug: `recheck-${RECHECK_MONTHS}m`,
+			scope: "deal",
 			title: `${RECHECK_MONTHS}-month re-check — ${deal.name}`,
 			body: `Contractual ${RECHECK_MONTHS}-month re-check. Reach out ~4 weeks before it falls due.`,
 			dueAt: this.addMonths(from, RECHECK_MONTHS),
@@ -212,6 +270,8 @@ export class ObligationsService {
 		const company = await this.db.company.findUnique({ where: { id: input.companyId } });
 		return this.ensure({
 			kind: "TRIAL_EXPIRY",
+			slug: "trial",
+			scope: "company",
 			title: `Trial expires — ${company?.name ?? input.companyId}`,
 			body: `${input.lengthDays}-day trial, ${input.seats} seat(s), provisioned ${input.provisionedAt.toISOString().slice(0, 10)}. It lapses on ${expiry.toISOString().slice(0, 10)} whether or not anyone acts.`,
 			dueAt: expiry,
