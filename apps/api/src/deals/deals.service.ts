@@ -594,7 +594,15 @@ export class DealsService {
 		}
 
 		return runBulk(input.ids, (id) =>
-			this.setStage({ id, stage: input.stage, closedReason }, actingUserId),
+			this.setStage(
+				{
+					id,
+					stage: input.stage,
+					closedReason,
+					engagementType: input.engagementType,
+				},
+				actingUserId,
+			),
 		);
 	}
 

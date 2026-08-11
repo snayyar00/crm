@@ -128,6 +128,9 @@ export type DealBulkOwnerInput = z.infer<typeof dealBulkOwnerInput>;
 export const dealBulkStageInput = bulkIdsInput.extend({
 	stage: stageEnum,
 	closedReason: z.string().trim().optional(),
+	/** Forwarded to setStage per deal — bulkSetStage delegates, so the same
+	 *  "say what kind of engagement this was" rule applies to every id. */
+	engagementType: z.enum(["AUDIT", "SUBSCRIPTION", "OTHER"]).optional(),
 });
 
 export type DealBulkStageInput = z.infer<typeof dealBulkStageInput>;

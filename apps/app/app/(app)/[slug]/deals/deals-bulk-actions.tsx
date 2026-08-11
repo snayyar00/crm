@@ -27,6 +27,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import {
+	type EngagementType,
+	EngagementTypeDialog,
+} from "@/components/crm/engagement-type-dialog";
+import {
 	BulkActionsMenu,
 	BulkDeleteDialog,
 	BulkOwnerMenu,
@@ -53,6 +57,9 @@ export function DealsBulkActions({
 	const reasonId = useId();
 	const [confirming, setConfirming] = useState(false);
 	const [closing, setClosing] = useState<DealStage | null>(null);
+	// Same server rule as the single-deal stepper: a WON close needs to say what
+	// kind of engagement it was, or five contractual clocks get invented.
+	const [winning, setWinning] = useState(false);
 	const [reason, setReason] = useState("");
 
 	const onError = (error: { message: string }) => toast.error(error.message);
@@ -117,6 +124,10 @@ export function DealsBulkActions({
 											setClosing(option.value);
 											return;
 										}
+										if (option.value === "CLOSED_WON") {
+											setWinning(true);
+											return;
+										}
 										setStage.mutate({ ids, stage: option.value });
 									}}
 								>
@@ -137,6 +148,17 @@ export function DealsBulkActions({
 					</DropdownMenuItem>
 				</DropdownMenuGroup>
 			</BulkActionsMenu>
+
+			<EngagementTypeDialog
+				open={winning}
+				count={ids.length}
+				pending={setStage.isPending}
+				onCancel={() => setWinning(false)}
+				onConfirm={(engagementType: EngagementType) => {
+					setWinning(false);
+					setStage.mutate({ ids, stage: "CLOSED_WON", engagementType });
+				}}
+			/>
 
 			<Dialog
 				open={closing !== null}
