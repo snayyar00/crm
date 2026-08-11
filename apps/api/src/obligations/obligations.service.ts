@@ -97,24 +97,46 @@ export class ObligationsService {
 				type: "TASK",
 				subject: input.title,
 				meta: { path: ["obligationKind"], equals: input.kind },
+				// OPEN clocks only. A completed obligation is a SATISFIED clock, and
+				// letting it match would silently swallow the next one: a second trial
+				// a year later has the same title, kind and company as the first, so it
+				// would find the closed row, report created:false, and leave the new
+				// expiry with nothing watching it. Silent, and invisible on a board that
+				// hides completed tasks — the exact failure this module exists to stop.
+				completedAt: null,
 				...scope,
 			},
+			// findFirst with no order is nondeterministic, and pre-fix duplicates still
+			// exist in the table. Oldest wins so the choice is at least stable.
+			orderBy: { occurredAt: "asc" },
 		});
 		// Report creation explicitly. Inferring it from `createdAt > now - 5s` looked
 		// right and was wrong: a re-run inside that window counted existing rows as new,
 		// so an idempotency check reported 5 created when it had created none.
-		if (existing) {
-			// A later call may know something the first did not — most often the deal
-			// this obligation belongs to. Attach it rather than dropping it on the
-			// floor, but never overwrite a link that already exists.
-			if (input.dealId && !existing.dealId) {
-				const linked = await this.db.activity.update({
+		// Company scope can surface a row belonging to a DIFFERENT deal. That is not
+		// this spawn's obligation, and returning it would silently alias two deals'
+		// clocks together — so fall through and create.
+		const aliasesAnotherDeal =
+			!!existing?.dealId && !!input.dealId && existing.dealId !== input.dealId;
+
+		if (existing && !aliasesAnotherDeal) {
+			// A repeat call can know things the first did not: the deal this obligation
+			// belongs to, or a new date because the trial was extended. Silently keeping
+			// a stale dueAt is worse than duplicating — a duplicate is noise the founder
+			// deletes, a stale clock fires on the wrong day and is believed.
+			const attachDeal = input.dealId && !existing.dealId;
+			const dateMoved = existing.dueAt?.getTime() !== input.dueAt.getTime();
+			if (attachDeal || dateMoved) {
+				const updated = await this.db.activity.update({
 					where: { id: existing.id },
-					data: { dealId: input.dealId },
+					data: {
+						...(attachDeal ? { dealId: input.dealId } : {}),
+						...(dateMoved ? { dueAt: input.dueAt, body: input.body } : {}),
+					},
 				});
-				return { row: linked, created: false };
+				return { row: updated, created: false, updated: true };
 			}
-			return { row: existing, created: false };
+			return { row: existing, created: false, updated: false };
 		}
 
 		const row = await this.db.activity.create({
@@ -130,7 +152,7 @@ export class ObligationsService {
 				meta: { obligationKind: input.kind, spawnedBy: "obligations.service" },
 			},
 		});
-		return { row, created: true };
+		return { row, created: true, updated: false };
 	}
 
 	/**
