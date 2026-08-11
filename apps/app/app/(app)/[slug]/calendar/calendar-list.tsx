@@ -1,6 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@crm/ui/components/button";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { toast } from "sonner";
+import { recordHref } from "@/lib/record-href";
 import { useTRPC } from "@/lib/trpc/client";
 
 /** Far enough out to include a 6-month re-check's approach without listing it
@@ -26,6 +31,8 @@ type Row = {
 	irreversible: boolean;
 	deal?: { name: string; stage: string } | null;
 	company?: { name: string } | null;
+	dealId?: string | null;
+	companyId?: string | null;
 };
 
 /**
@@ -76,9 +83,35 @@ function runway(r: Row): string {
 
 export function CalendarList() {
 	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const { slug } = useParams<{ slug: string }>();
 	const { data, isPending } = useQuery(
 		trpc.obligations.due.queryOptions({ withinDays: HORIZON_DAYS }),
 	);
+
+	// Completing here is the point of the screen, not a convenience: a clock you
+	// cannot clear nags forever, and a nag that cannot be cleared is what teaches
+	// someone to ignore the alarm. Closing a re-check also spawns the next one,
+	// so this is how the recurring cycle actually turns.
+	const complete = useMutation(
+		trpc.activities.complete.mutationOptions({
+			onSuccess: async () => {
+				await queryClient.invalidateQueries({
+					queryKey: trpc.obligations.due.queryKey({ withinDays: HORIZON_DAYS }),
+				});
+				toast.success("Marked done.");
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	/** Where this obligation actually lives, so the row can be opened. */
+	const hrefFor = (r: Row): string | null => {
+		if (r.dealId) return recordHref(slug, "/deals", "deal", r.dealId);
+		if (r.companyId)
+			return recordHref(slug, "/companies", "company", r.companyId);
+		return null;
+	};
 
 	if (isPending)
 		return <p className="text-muted-foreground text-sm">Loading…</p>;
@@ -107,32 +140,62 @@ export function CalendarList() {
 							<p className="text-muted-foreground text-xs">{g.blurb}</p>
 						</div>
 						<ul className="divide-y rounded-md border">
-							{items.map((r) => (
-								<li
-									key={r.id}
-									className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2"
-								>
-									<div className="min-w-0">
-										<p className="truncate font-medium text-sm">
-											{r.deal?.name ?? r.company?.name ?? "—"}
-											{r.irreversible ? (
-												// A lapse cannot be undone by doing the work late,
-												// which is the whole reason it outranks overdue work.
-												<span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 font-normal text-red-700 text-xs dark:bg-red-950 dark:text-red-300">
-													lapses
-												</span>
-											) : null}
-										</p>
-										<p className="truncate text-muted-foreground text-xs">
-											{r.subject}
-										</p>
-									</div>
-									<div className="shrink-0 text-right">
-										<p className={`text-sm ${g.tone}`}>{when(r)}</p>
-										<p className="text-muted-foreground text-xs">{runway(r)}</p>
-									</div>
-								</li>
-							))}
+							{items.map((r) => {
+								const href = hrefFor(r);
+								const body = (
+									<>
+										<div className="min-w-0">
+											<p className="truncate font-medium text-sm">
+												{r.deal?.name ?? r.company?.name ?? "—"}
+												{r.irreversible ? (
+													// A lapse cannot be undone by doing the work late,
+													// which is the whole reason it outranks overdue work.
+													<span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 font-normal text-red-700 text-xs dark:bg-red-950 dark:text-red-300">
+														lapses
+													</span>
+												) : null}
+											</p>
+											<p className="truncate text-muted-foreground text-xs">
+												{r.subject}
+											</p>
+										</div>
+										<div className="shrink-0 text-right">
+											<p className={`text-sm ${g.tone}`}>{when(r)}</p>
+											<p className="text-muted-foreground text-xs">
+												{runway(r)}
+											</p>
+										</div>
+									</>
+								);
+
+								return (
+									<li key={r.id} className="flex items-center gap-2 px-3 py-2">
+										{href ? (
+											<Link
+												href={href}
+												className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-sm hover:opacity-80"
+											>
+												{body}
+											</Link>
+										) : (
+											<div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+												{body}
+											</div>
+										)}
+										<Button
+											size="sm"
+											variant="outline"
+											className="shrink-0"
+											disabled={complete.isPending}
+											onClick={() =>
+												complete.mutate({ id: r.id, completed: true })
+											}
+										>
+											Done
+										</Button>
+									</li>
+								);
+							})}
 						</ul>
 					</section>
 				);

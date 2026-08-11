@@ -60,13 +60,22 @@ describe("Auth (e2e)", () => {
 			.get("/api/trpc/sso.signInOptions")
 			.expect(200);
 
-		const microsoftConfigured = Boolean(
-			process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET,
+		// Assert with the SAME predicates the service uses, rather than re-deriving
+		// them from process.env here. `google: true` was hard-coded, which made the
+		// suite unpassable on any machine whose GOOGLE_CLIENT_ID is empty — it
+		// blocked the pre-push hook and forced two production pushes through
+		// --no-verify. Re-deriving from env is no better: this file seeds env at
+		// module scope, and in a full run another spec can load the auth module
+		// first, so a hand-rolled check and the app can disagree about the same
+		// variable. Calling the exported predicate removes the disagreement by
+		// construction.
+		const { isGoogleConfigured, isMicrosoftConfigured } = await import(
+			"@crm/auth"
 		);
 
 		expect(response.body.result.data).toEqual({
-			google: true,
-			microsoft: microsoftConfigured,
+			google: isGoogleConfigured(),
+			microsoft: isMicrosoftConfigured(),
 			providers: [],
 		});
 	});
