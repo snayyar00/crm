@@ -46,6 +46,9 @@ export const dealCreateInput = z.object({
 	amountCents,
 	currency: currencyCode.optional(),
 	expectedCloseDate: z.string().nullable().optional(),
+	/** When the customer returned what we need to start. Setting it re-derives
+	 *  the deal's contractual deliverables from that date. */
+	workStartedAt: z.string().nullable().optional(),
 });
 
 export type DealCreateInput = z.infer<typeof dealCreateInput>;
@@ -58,6 +61,9 @@ const dealUpdateInput = z.object({
 	amountCents,
 	currency: currencyCode.optional(),
 	expectedCloseDate: z.string().nullable().optional(),
+	/** When the customer returned what we need to start. Setting it re-derives
+	 *  the deal's contractual deliverables from that date. */
+	workStartedAt: z.string().nullable().optional(),
 	fields: recordFieldValues.optional(),
 });
 

@@ -36,7 +36,13 @@ type DueRow = {
 	subject: string | null;
 	dueAt: Date | null;
 	meta: unknown;
-	deal: { name: string; amount: unknown; stage: string } | null;
+	deal: {
+		name: string;
+		amount: unknown;
+		stage: string;
+		engagementType?: string | null;
+		workStartedAt?: Date | null;
+	} | null;
 	company: { name: string } | null;
 };
 
@@ -123,13 +129,32 @@ export class ObligationDigestService {
 			where: { type: "TASK", completedAt: null, dueAt: { lte: horizon } },
 			orderBy: { dueAt: "asc" },
 			include: {
-				deal: { select: { name: true, amount: true, stage: true } },
+				deal: {
+					select: {
+						name: true,
+						amount: true,
+						stage: true,
+						engagementType: true,
+						workStartedAt: true,
+					},
+				},
 				company: { select: { name: true } },
 			},
 		})) as unknown as DueRow[];
 
 		const obligations = rows.filter(
-			(r) => Boolean(this.kindOf(r)) && this.slack(r) <= 0,
+			(r) =>
+				Boolean(this.kindOf(r)) &&
+				this.slack(r) <= 0 &&
+				// Never alarm about an audit deliverable whose work has not started.
+				// Its date is a placeholder until the customer returns what we asked
+				// for, and shouting about it trains the founder to distrust the alarm
+				// for the things that ARE his to answer for.
+				!(
+					r.deal?.engagementType === "AUDIT" &&
+					!r.deal?.workStartedAt &&
+					this.kindOf(r) !== "TRIAL_EXPIRY"
+				),
 		);
 		if (obligations.length === 0) return null;
 

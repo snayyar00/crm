@@ -29,6 +29,7 @@ type Row = {
 	leadDays: number;
 	slack: number;
 	irreversible: boolean;
+	awaitingStart?: boolean;
 	deal?: { name: string; stage: string } | null;
 	company?: { name: string } | null;
 	dealId?: string | null;
@@ -46,29 +47,42 @@ type Row = {
  */
 const GROUPS: Group[] = [
 	{
+		// First, because it is the group that needs a nudge to THEM rather than work
+		// from you — and because reading it as "overdue" blames you for their silence.
+		key: "waiting",
+		title: "Waiting on the customer",
+		blurb:
+			"Work cannot start until they send what was asked for. Dates are placeholders and re-derive once it arrives. Never emailed.",
+		tone: "text-muted-foreground",
+		match: (r) => Boolean(r.awaitingStart),
+	},
+	{
 		key: "overdue",
 		title: "Overdue",
 		blurb: "The date has passed. Still open.",
 		tone: "text-red-600 dark:text-red-400",
-		match: (r) => r.daysUntilDue < 0,
+		match: (r) => !r.awaitingStart && r.daysUntilDue < 0,
 	},
 	{
 		key: "act",
 		title: "Act now",
 		blurb: "Inside the runway this kind needs. The alarm emails these.",
 		tone: "text-amber-600 dark:text-amber-400",
-		match: (r) => r.daysUntilDue >= 0 && r.slack <= 0,
+		match: (r) => !r.awaitingStart && r.daysUntilDue >= 0 && r.slack <= 0,
 	},
 	{
 		key: "ahead",
 		title: "Ahead of it",
 		blurb: "Dated, not yet urgent. Deliberately not emailed.",
 		tone: "text-muted-foreground",
-		match: (r) => r.slack > 0,
+		match: (r) => !r.awaitingStart && r.slack > 0,
 	},
 ];
 
 function when(r: Row): string {
+	// Deliberately shows no day count: the number would be a placeholder derived
+	// from the close date, and printing it invites someone to act on it.
+	if (r.awaitingStart) return "not started";
 	if (r.daysUntilDue < 0) return `${Math.abs(r.daysUntilDue)} days overdue`;
 	if (r.daysUntilDue === 0) return "due today";
 	return `${r.daysUntilDue} days left`;
@@ -76,6 +90,7 @@ function when(r: Row): string {
 
 /** Say why it is urgent, not just that it is. */
 function runway(r: Row): string {
+	if (r.awaitingStart) return "clock starts when they respond";
 	if (r.slack > 0) return `needs ${r.leadDays}d — ${r.slack}d of slack`;
 	if (r.slack === 0) return `needs ${r.leadDays}d — start today`;
 	return `needs ${r.leadDays}d — ${Math.abs(r.slack)}d past the start point`;

@@ -1,0 +1,11 @@
+-- When the customer gave us what we need to start.
+--
+-- Contractual deliverables were dated from the deal's close date. On the first
+-- real audit that was wrong in both directions: Questback signed 2026-07-14, the
+-- intake questionnaire only went out 2026-08-10, and the calendar reported the
+-- audit report as "15 days overdue" — counting 27 days that were ours to answer
+-- for, and then continuing to count while the work legitimately could not start.
+--
+-- The clock that matters begins when the customer returns what we asked for.
+-- Nullable: while it is null the deliverables are WAITING, not late.
+ALTER TABLE "deal" ADD COLUMN "workStartedAt" TIMESTAMP(3);

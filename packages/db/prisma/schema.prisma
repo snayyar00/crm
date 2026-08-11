@@ -887,6 +887,16 @@ model Deal {
   currency          String    @default("USD")
   expectedCloseDate DateTime?
   closedAt          DateTime?
+  /// When the customer gave us what we need to actually start — for an audit,
+  /// the returned intake questionnaire. The contractual deliverable clocks are
+  /// derived from THIS, falling back to closedAt.
+  ///
+  /// It exists because dating them from the signature was wrong in both
+  /// directions on the first real deal: Questback signed 2026-07-14, the intake
+  /// only went out 2026-08-10, and the calendar read "15 days overdue" for work
+  /// that could not legitimately have started. While this is null the clocks are
+  /// WAITING, not late.
+  workStartedAt     DateTime?
   closedReason      String?
 
   baseAmount   Decimal?  @db.Decimal(24, 4)

@@ -295,6 +295,9 @@ export class DealsService {
 		if (input.expectedCloseDate !== undefined) {
 			data.expectedCloseDate = parseDate(input.expectedCloseDate);
 		}
+		if (input.workStartedAt !== undefined) {
+			data.workStartedAt = parseDate(input.workStartedAt);
+		}
 
 		if (input.amountCents !== undefined || input.currency !== undefined) {
 			const current = await this.db.deal.findUnique({
@@ -319,7 +322,7 @@ export class DealsService {
 		}
 
 		try {
-			return await this.db.$transaction(async (tx) => {
+			const updated = await this.db.$transaction(async (tx) => {
 				if (input.fields) {
 					await this.fields.applyValues(tx, "DEAL", id, input.fields);
 				}
@@ -330,6 +333,32 @@ export class DealsService {
 					select: { id: true, name: true },
 				});
 			});
+
+			// Recording when the work could actually start re-derives the contractual
+			// deliverables from that date. Outside the transaction and swallowed on
+			// failure, like the won-deal hook: the user's edit must stand even if the
+			// follow-up cannot be written, and the spawn is idempotent so a missed
+			// reconcile is recoverable by saving the field again.
+			if (input.workStartedAt !== undefined) {
+				try {
+					const spawned = await this.obligations.spawnForWonDeal(id, "system");
+					this.logger.log({
+						message: "Work start recorded; obligations re-derived",
+						dealId: id,
+						workStartedAt: input.workStartedAt,
+						spawned,
+					});
+				} catch (err) {
+					this.logger.error({
+						message:
+							"Could not re-derive obligations after a work-start change",
+						dealId: id,
+						detail: err instanceof Error ? err.message : String(err),
+					});
+				}
+			}
+
+			return updated;
 		} catch (error) {
 			throw this.translate(error, id);
 		}

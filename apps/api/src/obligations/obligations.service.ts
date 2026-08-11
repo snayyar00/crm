@@ -292,7 +292,12 @@ export class ObligationsService {
 			};
 		}
 
-		const from = deal.closedAt ?? deal.stageChangedAt ?? new Date();
+		// The deliverable clocks start when the customer gave us what we need —
+		// for an audit, the returned intake. Falling back to the close date is only
+		// a guess, and on the first real deal it was a bad one: 27 of those "late"
+		// days were ours, spent not sending the intake at all.
+		const from =
+			deal.workStartedAt ?? deal.closedAt ?? deal.stageChangedAt ?? new Date();
 		let created = 0;
 
 		for (const d of AUDIT_DELIVERABLES) {
@@ -478,7 +483,14 @@ export class ObligationsService {
 			where: { type: "TASK", completedAt: null, dueAt: { lte: horizon } },
 			orderBy: { dueAt: "asc" },
 			include: {
-				deal: { select: { name: true, stage: true } },
+				deal: {
+					select: {
+						name: true,
+						stage: true,
+						engagementType: true,
+						workStartedAt: true,
+					},
+				},
 				company: { select: { name: true } },
 			},
 		});
@@ -489,6 +501,15 @@ export class ObligationsService {
 					?.obligationKind;
 				const days = daysUntil(r.dueAt, now);
 				const lead = leadDaysFor(kind);
+				// An audit deliverable whose work has not been unblocked is WAITING on
+				// the customer, not late. Its date is a placeholder derived from the
+				// close date and is re-derived the moment work starts, so reporting it
+				// as overdue blames us for their silence — the same mistake that got
+				// the 5-day seller-silence detector cut.
+				const awaitingStart =
+					r.deal?.engagementType === "AUDIT" &&
+					!r.deal?.workStartedAt &&
+					kind !== "TRIAL_EXPIRY";
 				return {
 					...r,
 					kind,
@@ -496,6 +517,7 @@ export class ObligationsService {
 					leadDays: lead,
 					slack: days - lead,
 					irreversible: IRREVERSIBLE.has(kind ?? ""),
+					awaitingStart,
 				};
 			})
 			.filter((r) => Boolean(r.kind));
