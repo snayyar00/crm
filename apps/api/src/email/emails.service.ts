@@ -1,6 +1,10 @@
-import { InjectDatabase } from "../database/database.constants";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Db } from "@crm/db";
+import {
+	BadRequestException,
+	Injectable,
+	NotFoundException,
+} from "@nestjs/common";
+import { InjectDatabase } from "../database/database.constants";
 import type { EmailDraftInput } from "./emails.contracts";
 
 @Injectable()
@@ -31,16 +35,25 @@ export class EmailsService {
 		const job = await this.db.emailJob.findUnique({ where: { id } });
 		if (!job) throw new NotFoundException("No such email.");
 		if (job.status !== "DRAFT") {
-			throw new BadRequestException(`Only a draft can be released — this one is ${job.status}.`);
+			throw new BadRequestException(
+				`Only a draft can be released — this one is ${job.status}.`,
+			);
 		}
-		return this.db.emailJob.update({ where: { id }, data: { status: "QUEUED" } });
+		return this.db.emailJob.update({
+			where: { id },
+			data: { status: "QUEUED" },
+		});
 	}
 
 	async cancel(id: string) {
 		const job = await this.db.emailJob.findUnique({ where: { id } });
 		if (!job) throw new NotFoundException("No such email.");
-		if (job.status === "SENT") throw new BadRequestException("That one has already gone out.");
-		return this.db.emailJob.update({ where: { id }, data: { status: "CANCELLED" } });
+		if (job.status === "SENT")
+			throw new BadRequestException("That one has already gone out.");
+		return this.db.emailJob.update({
+			where: { id },
+			data: { status: "CANCELLED" },
+		});
 	}
 
 	async list(status: string | undefined, limit: number) {

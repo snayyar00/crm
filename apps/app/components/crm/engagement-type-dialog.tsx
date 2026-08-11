@@ -26,24 +26,25 @@ export type EngagementType = "AUDIT" | "SUBSCRIPTION" | "OTHER";
  * It rides the click the founder is already making. A separate optional control
  * on the deal record would be the kind of thing nobody remembers to set.
  */
-const OPTIONS: Array<{ value: EngagementType; label: string; blurb: string }> = [
-	{
-		value: "AUDIT",
-		label: "Audit engagement",
-		blurb:
-			"A signed WCAG audit. Creates the report, VPAT, accessibility statement, remediation verification and the 6-month re-check, each dated.",
-	},
-	{
-		value: "SUBSCRIPTION",
-		label: "Subscription",
-		blurb: "Widget or agency plan. No contractual deliverables are created.",
-	},
-	{
-		value: "OTHER",
-		label: "Something else",
-		blurb: "Recorded as won, with no deliverables.",
-	},
-];
+const OPTIONS: Array<{ value: EngagementType; label: string; blurb: string }> =
+	[
+		{
+			value: "AUDIT",
+			label: "Audit engagement",
+			blurb:
+				"A signed WCAG audit. Creates the report, VPAT, accessibility statement, remediation verification and the 6-month re-check, each dated.",
+		},
+		{
+			value: "SUBSCRIPTION",
+			label: "Subscription",
+			blurb: "Widget or agency plan. No contractual deliverables are created.",
+		},
+		{
+			value: "OTHER",
+			label: "Something else",
+			blurb: "Recorded as won, with no deliverables.",
+		},
+	];
 
 export function EngagementTypeDialog({
 	open,

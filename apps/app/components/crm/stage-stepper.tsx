@@ -5,11 +5,11 @@ import { cn } from "@crm/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DealStageIndicator } from "@/components/crm/deal-stage";
 import {
 	type EngagementType,
 	EngagementTypeDialog,
 } from "@/components/crm/engagement-type-dialog";
-import { DealStageIndicator } from "@/components/crm/deal-stage";
 import { dealStageLabel, isClosedStage, OPEN_STAGES } from "@/lib/deal-stage";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";

@@ -86,15 +86,23 @@ export class SyncController {
 	 */
 	private async runObligations(authorization?: string) {
 		if (!this.secret) {
-			this.logger.error({ message: "CRON_SECRET is not set — refusing to run the obligation alarm." });
-			throw new ServiceUnavailableException("Obligation alarm is not configured.");
+			this.logger.error({
+				message:
+					"CRON_SECRET is not set — refusing to run the obligation alarm.",
+			});
+			throw new ServiceUnavailableException(
+				"Obligation alarm is not configured.",
+			);
 		}
 		if (!timingSafeEquals(authorization ?? "", `Bearer ${this.secret}`)) {
 			throw new ForbiddenException();
 		}
 		const to = process.env.OBLIGATION_DIGEST_TO;
 		if (!to) {
-			this.logger.error({ message: "OBLIGATION_DIGEST_TO is not set — refusing to guess a recipient." });
+			this.logger.error({
+				message:
+					"OBLIGATION_DIGEST_TO is not set — refusing to guess a recipient.",
+			});
 			throw new ServiceUnavailableException("No digest recipient configured.");
 		}
 		const owner = await this.obligationDigest.ownerId();
@@ -104,8 +112,12 @@ export class SyncController {
 	/** Drains QUEUED email jobs. Same bearer contract as the mailbox route. */
 	private async runEmails(authorization?: string) {
 		if (!this.secret) {
-			this.logger.error({ message: "CRON_SECRET is not set — refusing to run email dispatch." });
-			throw new ServiceUnavailableException("Email dispatch is not configured.");
+			this.logger.error({
+				message: "CRON_SECRET is not set — refusing to run email dispatch.",
+			});
+			throw new ServiceUnavailableException(
+				"Email dispatch is not configured.",
+			);
 		}
 		if (!timingSafeEquals(authorization ?? "", `Bearer ${this.secret}`)) {
 			throw new ForbiddenException();

@@ -32,7 +32,12 @@ export const trialSignalOutput = z.object({
 	daysSinceActivity: z.number().nullable(),
 	/** Days since we last emailed them. */
 	daysSinceOurContact: z.number().nullable(),
-	verdict: z.enum(["ACTIVE_AND_IGNORED", "ACTIVE", "GOING_QUIET", "NEVER_STARTED"]),
+	verdict: z.enum([
+		"ACTIVE_AND_IGNORED",
+		"ACTIVE",
+		"GOING_QUIET",
+		"NEVER_STARTED",
+	]),
 	reason: z.string(),
 });
 

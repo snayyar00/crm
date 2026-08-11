@@ -22,7 +22,9 @@ export const emailDraftInput = z.object({
 export const emailIdInput = z.object({ id: z.string() });
 
 export const emailListInput = z.object({
-	status: z.enum(["DRAFT", "QUEUED", "SENDING", "SENT", "FAILED", "CANCELLED"]).optional(),
+	status: z
+		.enum(["DRAFT", "QUEUED", "SENDING", "SENT", "FAILED", "CANCELLED"])
+		.optional(),
 	limit: z.number().int().min(1).max(200).default(50),
 });
 

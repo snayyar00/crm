@@ -9,8 +9,8 @@ import { ContactsService } from "../src/contacts/contacts.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DealsService } from "../src/deals/deals.service";
-import { ObligationsService } from "../src/obligations/obligations.service";
 import { FieldsService } from "../src/fields/fields.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "bulk-spec";
 const domain = `bulk-${suffix}.test`;
@@ -47,7 +47,13 @@ const companies = new CompaniesService(
 	conversion,
 	fields,
 );
-const deals = new DealsService(db, stamp, conversion, fields, new ObligationsService(db));
+const deals = new DealsService(
+	db,
+	stamp,
+	conversion,
+	fields,
+	new ObligationsService(db),
+);
 
 let companyId: string;
 

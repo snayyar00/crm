@@ -80,14 +80,15 @@ export function CalendarList() {
 		trpc.obligations.due.queryOptions({ withinDays: HORIZON_DAYS }),
 	);
 
-	if (isPending) return <p className="text-muted-foreground text-sm">Loading…</p>;
+	if (isPending)
+		return <p className="text-muted-foreground text-sm">Loading…</p>;
 
 	const rows = (data ?? []) as unknown as Row[];
 	if (rows.length === 0) {
 		return (
 			<p className="text-muted-foreground text-sm">
-				No contractual clocks in the next {HORIZON_DAYS} days. Obligations appear
-				here when a deal is won or a trial is recorded.
+				No contractual clocks in the next {HORIZON_DAYS} days. Obligations
+				appear here when a deal is won or a trial is recorded.
 			</p>
 		);
 	}

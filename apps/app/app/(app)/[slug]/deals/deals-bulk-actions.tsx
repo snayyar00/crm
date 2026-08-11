@@ -27,15 +27,15 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import {
-	type EngagementType,
-	EngagementTypeDialog,
-} from "@/components/crm/engagement-type-dialog";
-import {
 	BulkActionsMenu,
 	BulkDeleteDialog,
 	BulkOwnerMenu,
 	reportBulk,
 } from "@/components/crm/bulk-actions";
+import {
+	type EngagementType,
+	EngagementTypeDialog,
+} from "@/components/crm/engagement-type-dialog";
 import { DEAL_STAGE_OPTIONS, LOSING_STAGES } from "@/lib/deal-stage";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";

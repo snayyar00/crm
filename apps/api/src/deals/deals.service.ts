@@ -6,7 +6,6 @@ import {
 	Prisma as PrismaNamespace,
 } from "@crm/db";
 import { normalizeCurrency } from "@crm/db/currency";
-import { ObligationsService } from "../obligations/obligations.service";
 import {
 	CLOSED_DEAL_STAGES,
 	isClosedStage,
@@ -33,6 +32,7 @@ import {
 import { ConversionService } from "../currency/conversion.service";
 import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
+import { ObligationsService } from "../obligations/obligations.service";
 import {
 	countsByKey,
 	FACET_ALL,
@@ -451,11 +451,19 @@ export class DealsService {
 		// missed spawn is recoverable by re-running it.
 		if (input.stage === "CLOSED_WON") {
 			try {
-				const spawned = await this.obligations.spawnForWonDeal(deal.id, actingUserId);
-				this.logger.log({ message: "Spawned won-deal obligations", dealId: deal.id, ...spawned });
+				const spawned = await this.obligations.spawnForWonDeal(
+					deal.id,
+					actingUserId,
+				);
+				this.logger.log({
+					message: "Spawned won-deal obligations",
+					dealId: deal.id,
+					...spawned,
+				});
 			} catch (err) {
 				this.logger.error({
-					message: "Could not spawn won-deal obligations — the stage change stands",
+					message:
+						"Could not spawn won-deal obligations — the stage change stands",
 					dealId: deal.id,
 					detail: err instanceof Error ? err.message : String(err),
 				});

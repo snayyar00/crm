@@ -1,5 +1,12 @@
 import { Inject } from "@nestjs/common";
-import { Ctx, Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
+import {
+	Ctx,
+	Input,
+	Mutation,
+	Query,
+	Router,
+	UseMiddlewares,
+} from "nestjs-trpc";
 import type { z } from "zod";
 import type { AuthedTrpcContext } from "../trpc/context.types";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
@@ -28,7 +35,8 @@ import { ObligationsService } from "./obligations.service";
 @UseMiddlewares(AuthMiddleware)
 export class ObligationsRouter {
 	constructor(
-		@Inject(ObligationsService) private readonly obligations: ObligationsService,
+		@Inject(ObligationsService)
+		private readonly obligations: ObligationsService,
 	) {}
 
 	/** Everything due or overdue inside the window, soonest first. */

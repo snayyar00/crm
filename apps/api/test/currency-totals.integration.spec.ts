@@ -6,8 +6,8 @@ import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DashboardService } from "../src/dashboard/dashboard.service";
 import { DealsService } from "../src/deals/deals.service";
-import { ObligationsService } from "../src/obligations/obligations.service";
 import { FieldsService } from "../src/fields/fields.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "currency-totals-spec";
 const userId = `user-${suffix}`;

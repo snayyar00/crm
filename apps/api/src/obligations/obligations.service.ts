@@ -1,6 +1,6 @@
-import { InjectDatabase } from "../database/database.constants";
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { Db } from "@crm/db";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { InjectDatabase } from "../database/database.constants";
 
 /**
  * Dated obligations — the clocks an accessibility business runs on.
@@ -39,7 +39,11 @@ export type ObligationKind =
  */
 const AUDIT_DELIVERABLES = [
 	{ slug: "audit-report", title: "Audit report", offsetDays: 14 },
-	{ slug: "vpat", title: "VPAT / Accessibility Conformance Report", offsetDays: 21 },
+	{
+		slug: "vpat",
+		title: "VPAT / Accessibility Conformance Report",
+		offsetDays: 21,
+	},
 	{ slug: "statement", title: "Accessibility statement", offsetDays: 21 },
 	{ slug: "verification", title: "Remediation verification", offsetDays: 45 },
 ] as const;
@@ -69,7 +73,10 @@ export const LEAD_DAYS: Record<ObligationKind, number> = {
 /** An unknown kind gets the TIGHTEST window — a new kind should under-alarm
  *  until someone gives it a considered lead time, not spam. */
 export const DEFAULT_LEAD_DAYS = 3;
-export const MAX_LEAD_DAYS = Math.max(...Object.values(LEAD_DAYS), DEFAULT_LEAD_DAYS);
+export const MAX_LEAD_DAYS = Math.max(
+	...Object.values(LEAD_DAYS),
+	DEFAULT_LEAD_DAYS,
+);
 
 /** Kinds where missing the date destroys the thing itself. A late audit report
  *  is late; a lapsed trial is over. */
@@ -203,7 +210,11 @@ export class ObligationsService {
 		}
 
 		try {
-			return { row: await this.create(input, key), created: true, updated: false };
+			return {
+				row: await this.create(input, key),
+				created: true,
+				updated: false,
+			};
 		} catch (err) {
 			// P2002 = the partial unique index on meta->>'obligationKey' rejected us,
 			// which means a concurrent spawn (cron vs a manual call) won the race
@@ -218,7 +229,10 @@ export class ObligationsService {
 				},
 			});
 			if (!raced) throw err;
-			this.logger.log({ message: "Obligation lost an insert race; reused the winner", key });
+			this.logger.log({
+				message: "Obligation lost an insert race; reused the winner",
+				key,
+			});
 			return { row: raced, created: false, updated: false };
 		}
 	}
@@ -272,7 +286,10 @@ export class ObligationsService {
 		// missing a checklist risks one late deliverable on a signed SOW the
 		// founder wrote himself; a lying alarm loses every deal it protects.
 		if (deal.engagementType !== "AUDIT") {
-			return { created: 0, reason: `not an audit engagement (${deal.engagementType ?? "unset"})` };
+			return {
+				created: 0,
+				reason: `not an audit engagement (${deal.engagementType ?? "unset"})`,
+			};
 		}
 
 		const from = deal.closedAt ?? deal.stageChangedAt ?? new Date();
@@ -324,7 +341,9 @@ export class ObligationsService {
 		createdById: string;
 	}) {
 		const expiry = this.addDays(input.provisionedAt, input.lengthDays);
-		const company = await this.db.company.findUnique({ where: { id: input.companyId } });
+		const company = await this.db.company.findUnique({
+			where: { id: input.companyId },
+		});
 		return this.ensure({
 			kind: "TRIAL_EXPIRY",
 			slug: "trial",
@@ -352,11 +371,19 @@ export class ObligationsService {
 	 * The caller passes `wasCompleted` so this only fires on a real TRANSITION. A
 	 * second click on an already-completed task must not re-date the successor.
 	 */
-	async handleCompletionChange(tx: Db, activityId: string, wasCompleted: boolean, nowCompleted: boolean) {
+	async handleCompletionChange(
+		tx: Db,
+		activityId: string,
+		wasCompleted: boolean,
+		nowCompleted: boolean,
+	) {
 		if (wasCompleted === nowCompleted) return { spawned: null, deleted: null };
 
 		const row = await tx.activity.findUnique({ where: { id: activityId } });
-		const meta = (row?.meta ?? null) as { obligationKind?: string; obligationKey?: string } | null;
+		const meta = (row?.meta ?? null) as {
+			obligationKind?: string;
+			obligationKey?: string;
+		} | null;
 		if (!row || !meta?.obligationKind) return { spawned: null, deleted: null };
 
 		if (nowCompleted) return this.spawnSuccessor(tx, row, meta);
@@ -370,8 +397,20 @@ export class ObligationsService {
 	 * every cycle by however late the close was — and closing more than six months
 	 * late would spawn a successor that is born overdue.
 	 */
-	private async spawnSuccessor(tx: Db, row: { id: string; subject: string | null; body: string | null; dealId: string | null; companyId: string | null; createdById: string }, meta: { obligationKind?: string; obligationKey?: string }) {
-		if (meta.obligationKind !== "RECHECK_DUE") return { spawned: null, deleted: null };
+	private async spawnSuccessor(
+		tx: Db,
+		row: {
+			id: string;
+			subject: string | null;
+			body: string | null;
+			dealId: string | null;
+			companyId: string | null;
+			createdById: string;
+		},
+		meta: { obligationKind?: string; obligationKey?: string },
+	) {
+		if (meta.obligationKind !== "RECHECK_DUE")
+			return { spawned: null, deleted: null };
 
 		const dueAt = this.addMonths(new Date(), RECHECK_MONTHS);
 		try {
@@ -398,7 +437,8 @@ export class ObligationsService {
 		} catch (err) {
 			// P2002 = the partial unique index already has an OPEN row for this key,
 			// so a successor exists. A concurrent double-click is a no-op, not a 500.
-			if ((err as { code?: string }).code === "P2002") return { spawned: null, deleted: null };
+			if ((err as { code?: string }).code === "P2002")
+				return { spawned: null, deleted: null };
 			throw err;
 		}
 	}
@@ -437,12 +477,16 @@ export class ObligationsService {
 		const rows = await this.db.activity.findMany({
 			where: { type: "TASK", completedAt: null, dueAt: { lte: horizon } },
 			orderBy: { dueAt: "asc" },
-			include: { deal: { select: { name: true, stage: true } }, company: { select: { name: true } } },
+			include: {
+				deal: { select: { name: true, stage: true } },
+				company: { select: { name: true } },
+			},
 		});
 		const now = Date.now();
 		return rows
 			.map((r) => {
-				const kind = (r.meta as { obligationKind?: string } | null)?.obligationKind;
+				const kind = (r.meta as { obligationKind?: string } | null)
+					?.obligationKind;
 				const days = daysUntil(r.dueAt, now);
 				const lead = leadDaysFor(kind);
 				return {

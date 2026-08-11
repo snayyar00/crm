@@ -1,11 +1,11 @@
-import { InjectDatabase } from "../database/database.constants";
-import { Injectable, Logger } from "@nestjs/common";
 import type { Db } from "@crm/db";
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectDatabase } from "../database/database.constants";
 import {
-	IRREVERSIBLE,
-	MAX_LEAD_DAYS,
 	daysUntil,
+	IRREVERSIBLE,
 	leadDaysFor,
+	MAX_LEAD_DAYS,
 } from "./obligations.service";
 
 /**
@@ -94,9 +94,15 @@ export class ObligationDigestService {
 	private line(r: DueRow): string {
 		const days = this.daysFromNow(r.dueAt);
 		const who = r.deal?.name ?? r.company?.name ?? "—";
-		const money = r.deal?.amount ? ` $${Number(r.deal.amount).toLocaleString()}` : "";
+		const money = r.deal?.amount
+			? ` $${Number(r.deal.amount).toLocaleString()}`
+			: "";
 		const age =
-			days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? "due today" : `${days} days left`;
+			days < 0
+				? `${Math.abs(days)} days overdue`
+				: days === 0
+					? "due today"
+					: `${days} days left`;
 		return `${who}${money} — ${age}. ${r.subject ?? ""}`.trim();
 	}
 
@@ -104,7 +110,11 @@ export class ObligationDigestService {
 	 * Returns null when there is nothing worth interrupting for. That null is the
 	 * feature, not an empty case to be filled with reassurance.
 	 */
-	async build(): Promise<{ subject: string; body: string; count: number } | null> {
+	async build(): Promise<{
+		subject: string;
+		body: string;
+		count: number;
+	} | null> {
 		// Fetch to the WIDEST lead time, then filter each row against its own. A
 		// single narrow horizon would drop a trial that is 12 days out before the
 		// per-kind rule ever saw it.
@@ -151,7 +161,9 @@ export class ObligationDigestService {
 			// that is the filter that let it into this list at all. The old copy was
 			// left over from the single 3-day window and would have described an
 			// overdue signed-contract deliverable as fine.
-			...(rest > 0 ? ["", `(${rest} more also past their lead time — open the CRM.)`] : []),
+			...(rest > 0
+				? ["", `(${rest} more also past their lead time — open the CRM.)`]
+				: []),
 		].join("\n");
 
 		return { subject, body, count: obligations.length };
@@ -162,8 +174,13 @@ export class ObligationDigestService {
 	 * Used as the EmailJob author; the alarm has no other sensible attribution.
 	 */
 	async ownerId(): Promise<string> {
-		const user = await this.db.user.findFirst({ orderBy: { createdAt: "asc" } });
-		if (!user) throw new Error("No user exists — cannot attribute the obligation alarm.");
+		const user = await this.db.user.findFirst({
+			orderBy: { createdAt: "asc" },
+		});
+		if (!user)
+			throw new Error(
+				"No user exists — cannot attribute the obligation alarm.",
+			);
 		return user.id;
 	}
 
@@ -174,7 +191,9 @@ export class ObligationDigestService {
 	async run(to: string, createdById: string) {
 		const digest = await this.build();
 		if (!digest) {
-			this.logger.log({ message: "Nothing overdue or urgent — sending nothing." });
+			this.logger.log({
+				message: "Nothing overdue or urgent — sending nothing.",
+			});
 			return { sent: false as const, reason: "clean" };
 		}
 
@@ -190,7 +209,16 @@ export class ObligationDigestService {
 			},
 		});
 
-		this.logger.warn({ message: "Obligation alarm queued", subject: digest.subject, count: digest.count });
-		return { sent: true as const, emailJobId: job.id, subject: digest.subject, count: digest.count };
+		this.logger.warn({
+			message: "Obligation alarm queued",
+			subject: digest.subject,
+			count: digest.count,
+		});
+		return {
+			sent: true as const,
+			emailJobId: job.id,
+			subject: digest.subject,
+			count: digest.count,
+		};
 	}
 }

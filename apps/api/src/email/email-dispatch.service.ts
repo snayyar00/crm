@@ -1,7 +1,7 @@
-import { InjectDatabase } from "../database/database.constants";
-import { Injectable, Logger } from "@nestjs/common";
 import type { Db } from "@crm/db";
 import { isEmailConfigured, sendEmail } from "@crm/email";
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectDatabase } from "../database/database.constants";
 
 /**
  * Drains the EmailJob queue.
@@ -20,9 +20,13 @@ export class EmailDispatchService {
 
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	async runDue(limit = 10): Promise<{ sent: number; failed: number; skipped: number }> {
+	async runDue(
+		limit = 10,
+	): Promise<{ sent: number; failed: number; skipped: number }> {
 		if (!isEmailConfigured()) {
-			this.logger.warn({ message: "BREVO_API_KEY is not set — email dispatch is a no-op." });
+			this.logger.warn({
+				message: "BREVO_API_KEY is not set — email dispatch is a no-op.",
+			});
 			return { sent: 0, failed: 0, skipped: 0 };
 		}
 
@@ -34,7 +38,10 @@ export class EmailDispatchService {
 			// Claim one row. The updateMany-with-status-guard is the lock: a second
 			// dispatcher racing us updates 0 rows and moves on.
 			const candidate = await this.db.emailJob.findFirst({
-				where: { status: "QUEUED", OR: [{ dueAt: null }, { dueAt: { lte: now } }] },
+				where: {
+					status: "QUEUED",
+					OR: [{ dueAt: null }, { dueAt: { lte: now } }],
+				},
 				orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
 			});
 			if (!candidate) break;
@@ -61,7 +68,12 @@ export class EmailDispatchService {
 
 				await this.db.emailJob.update({
 					where: { id: candidate.id },
-					data: { status: "SENT", sentAt: new Date(), messageId: result.messageId, error: null },
+					data: {
+						status: "SENT",
+						sentAt: new Date(),
+						messageId: result.messageId,
+						error: null,
+					},
 				});
 
 				// The send is the fact worth keeping — log it where a human will look.
@@ -81,7 +93,11 @@ export class EmailDispatchService {
 				}
 
 				sent += 1;
-				this.logger.log({ message: "Email sent", id: candidate.id, to: candidate.to });
+				this.logger.log({
+					message: "Email sent",
+					id: candidate.id,
+					to: candidate.to,
+				});
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
 				// Three strikes, then it stops and waits for a human. Retrying a
@@ -89,10 +105,19 @@ export class EmailDispatchService {
 				const giveUp = candidate.attempts + 1 >= 3;
 				await this.db.emailJob.update({
 					where: { id: candidate.id },
-					data: { status: giveUp ? "FAILED" : "QUEUED", error: message.slice(0, 500) },
+					data: {
+						status: giveUp ? "FAILED" : "QUEUED",
+						error: message.slice(0, 500),
+					},
 				});
 				failed += 1;
-				this.logger.error({ message: "Email send failed", id: candidate.id, attempts: candidate.attempts + 1, giveUp, detail: message });
+				this.logger.error({
+					message: "Email send failed",
+					id: candidate.id,
+					attempts: candidate.attempts + 1,
+					giveUp,
+					detail: message,
+				});
 			}
 		}
 
