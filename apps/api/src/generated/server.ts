@@ -25,6 +25,7 @@ import { emailListInput, emailDraftInput, emailIdInput } from "../email/emails.c
 import { fieldListInput, fieldByKeyInput, fieldIdInput, fieldCreateInput, fieldUpdateArgs, fieldReorderInput } from "../fields/fields.contracts";
 import { setAutoCreateInput, suppressDomainInput, threadInput, calendarEventInput } from "../google/google.contracts";
 import { setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
+import { obligationDueInput, obligationStartTrialInput } from "../obligations/obligations.contracts";
 import { setAgentModelInput, setResearchKeyInput } from "../settings/settings.contracts";
 import { ssoProviderListInput, registerSsoProviderInput, deleteSsoProviderInput } from "../sso/sso.contracts";
 import { memberListInput, updateWorkspaceInput, setMemberRoleInput } from "../workspace/workspace.contracts";
@@ -40,6 +41,7 @@ import type { EmailsRouter } from "../email/emails.router";
 import type { FieldsRouter } from "../fields/fields.router";
 import type { GoogleRouter } from "../google/google.router";
 import type { MicrosoftRouter } from "../microsoft/microsoft.router";
+import type { ObligationsRouter } from "../obligations/obligations.router";
 import type { SearchRouter } from "../search/search.router";
 import type { SettingsRouter } from "../settings/settings.router";
 import type { SsoRouter } from "../sso/sso.router";
@@ -364,6 +366,14 @@ const appRouter = t.router({
     setAutoCreate: publicProcedure
       .input(setOutlookAutoCreateInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<MicrosoftRouter["setAutoCreate"]>>)
+    }),
+  obligations: t.router({
+    due: publicProcedure
+      .input(obligationDueInput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ObligationsRouter["due"]>>),
+    startTrial: publicProcedure
+      .input(obligationStartTrialInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ObligationsRouter["startTrial"]>>)
     }),
   search: t.router({
     quick: publicProcedure

@@ -2,6 +2,7 @@
 
 import Bot from "@carbon/icons-react/es/Bot";
 import Building from "@carbon/icons-react/es/Building";
+import Calendar from "@carbon/icons-react/es/Calendar";
 import type { CarbonIconType } from "@carbon/icons-react/es/CarbonIcon";
 import Close from "@carbon/icons-react/es/Close";
 import Dashboard from "@carbon/icons-react/es/Dashboard";
@@ -48,6 +49,7 @@ const ITEMS: RailItem[] = [
 		match: "prefix",
 	},
 	{ title: "Deals", href: "/deals", icon: Partnership, match: "prefix" },
+	{ title: "Calendar", href: "/calendar", icon: Calendar, match: "prefix" },
 	{
 		title: "Chat",
 		href: "/chat",

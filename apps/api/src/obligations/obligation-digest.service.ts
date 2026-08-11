@@ -1,7 +1,12 @@
 import { InjectDatabase } from "../database/database.constants";
 import { Injectable, Logger } from "@nestjs/common";
 import type { Db } from "@crm/db";
-import type { ObligationKind } from "./obligations.service";
+import {
+	IRREVERSIBLE,
+	MAX_LEAD_DAYS,
+	daysUntil,
+	leadDaysFor,
+} from "./obligations.service";
 
 /**
  * The morning alarm for dated obligations.
@@ -24,55 +29,6 @@ import type { ObligationKind } from "./obligations.service";
  * pinned to DIGEST_TO for exactly that reason — this bypass must never be able to
  * address a customer.
  */
-/**
- * How much RUNWAY each kind needs, in days — not how soon it is due.
- *
- * A single URGENT_DAYS = 3 was wrong in a way that only showed up against real
- * data: USPTO's trial expires 2026-08-23, so on 11 August it sat at +12 days and
- * the first email about a federal trial — unsigned deal, an unfixed Edge bug, 17
- * days of seller silence — would have arrived on 20 August. Three days of notice
- * on something that takes two weeks to rescue is an obituary, not an alarm.
- *
- * So the number is the time needed to ACT, per kind:
- *   TRIAL_EXPIRY   a lapse is unrecoverable and rescuing it means a conversation,
- *                  a fix and a signature — two weeks is the honest minimum.
- *   RECHECK_DUE    contractual, but it needs the customer's calendar.
- *   VPAT_EXPIRY    a new conformance report is real work, not a form.
- *   LEGAL_DEADLINE assume it needs a person who is not you.
- *   DELIVERABLE_DUE you can write an artifact in a few days; this is the one
- *                  kind where the old 3 was right.
- */
-const LEAD_DAYS: Record<ObligationKind, number> = {
-	TRIAL_EXPIRY: 14,
-	RECHECK_DUE: 14,
-	VPAT_EXPIRY: 21,
-	LEGAL_DEADLINE: 14,
-	DELIVERABLE_DUE: 3,
-};
-/** An unknown kind gets the tightest window rather than the loosest — a new kind
- *  should under-alarm until someone gives it a considered lead time, not spam. */
-const DEFAULT_LEAD_DAYS = 3;
-
-/**
- * Kinds where missing the date destroys the thing itself.
- *
- * A late audit report is late — you send it and the deal survives. A lapsed
- * trial is over: the seats stop, the evaluation ends, and no amount of
- * apologising re-opens it. Slack alone cannot express that, and the difference
- * showed up the first time this ran against real rows: USPTO's trial entered its
- * window and was still pushed off the email by three overdue deliverables on a
- * deal that was already signed.
- *
- * This is therefore the PRIMARY sort key, not a reserved slot. A slot rescues
- * exactly one item however many are lapsing — with two trials in window it
- * showed one and buried the other, which is the same failure it was added to
- * fix. Sorting by it scales; a slot does not.
- */
-const IRREVERSIBLE: ReadonlySet<string> = new Set<ObligationKind>([
-	"TRIAL_EXPIRY",
-	"LEGAL_DEADLINE",
-]);
-const MAX_LEAD_DAYS = Math.max(...Object.values(LEAD_DAYS), DEFAULT_LEAD_DAYS);
 const TOP_N = 3;
 
 type DueRow = {
@@ -91,8 +47,7 @@ export class ObligationDigestService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
 	private daysFromNow(d: Date | null): number {
-		if (!d) return Number.POSITIVE_INFINITY;
-		return Math.floor((d.getTime() - Date.now()) / 86_400_000);
+		return daysUntil(d);
 	}
 
 	private kindOf(r: DueRow): string | undefined {
@@ -100,9 +55,7 @@ export class ObligationDigestService {
 	}
 
 	private leadFor(r: DueRow): number {
-		const k = this.kindOf(r);
-		if (!k) return DEFAULT_LEAD_DAYS;
-		return LEAD_DAYS[k as ObligationKind] ?? DEFAULT_LEAD_DAYS;
+		return leadDaysFor(this.kindOf(r));
 	}
 
 	/**

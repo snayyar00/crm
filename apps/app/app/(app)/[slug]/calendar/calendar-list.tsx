@@ -1,0 +1,141 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/lib/trpc/client";
+
+/** Far enough out to include a 6-month re-check's approach without listing it
+ *  from the day it is created. */
+export const HORIZON_DAYS = 120;
+
+type Group = {
+	key: string;
+	title: string;
+	blurb: string;
+	tone: string;
+	match: (r: Row) => boolean;
+};
+
+type Row = {
+	id: string;
+	subject: string | null;
+	dueAt: string | Date | null;
+	kind?: string;
+	daysUntilDue: number;
+	leadDays: number;
+	slack: number;
+	irreversible: boolean;
+	deal?: { name: string; stage: string } | null;
+	company?: { name: string } | null;
+};
+
+/**
+ * Three groups, in the order a founder should read them.
+ *
+ * "Act now" is not "due now" — it is slack <= 0, i.e. the point where the work
+ * needed to meet the date should already have started. A trial 11 days out with
+ * a 14-day runway belongs here; a deliverable 5 days out with a 3-day runway
+ * does not. That is the same rule the morning alarm uses, imported from the API
+ * rather than re-implemented, so the screen and the email can never disagree.
+ */
+const GROUPS: Group[] = [
+	{
+		key: "overdue",
+		title: "Overdue",
+		blurb: "The date has passed. Still open.",
+		tone: "text-red-600 dark:text-red-400",
+		match: (r) => r.daysUntilDue < 0,
+	},
+	{
+		key: "act",
+		title: "Act now",
+		blurb: "Inside the runway this kind needs. The alarm emails these.",
+		tone: "text-amber-600 dark:text-amber-400",
+		match: (r) => r.daysUntilDue >= 0 && r.slack <= 0,
+	},
+	{
+		key: "ahead",
+		title: "Ahead of it",
+		blurb: "Dated, not yet urgent. Deliberately not emailed.",
+		tone: "text-muted-foreground",
+		match: (r) => r.slack > 0,
+	},
+];
+
+function when(r: Row): string {
+	if (r.daysUntilDue < 0) return `${Math.abs(r.daysUntilDue)} days overdue`;
+	if (r.daysUntilDue === 0) return "due today";
+	return `${r.daysUntilDue} days left`;
+}
+
+/** Say why it is urgent, not just that it is. */
+function runway(r: Row): string {
+	if (r.slack > 0) return `needs ${r.leadDays}d — ${r.slack}d of slack`;
+	if (r.slack === 0) return `needs ${r.leadDays}d — start today`;
+	return `needs ${r.leadDays}d — ${Math.abs(r.slack)}d past the start point`;
+}
+
+export function CalendarList() {
+	const trpc = useTRPC();
+	const { data, isPending } = useQuery(
+		trpc.obligations.due.queryOptions({ withinDays: HORIZON_DAYS }),
+	);
+
+	if (isPending) return <p className="text-muted-foreground text-sm">Loading…</p>;
+
+	const rows = (data ?? []) as unknown as Row[];
+	if (rows.length === 0) {
+		return (
+			<p className="text-muted-foreground text-sm">
+				No contractual clocks in the next {HORIZON_DAYS} days. Obligations appear
+				here when a deal is won or a trial is recorded.
+			</p>
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-8">
+			{GROUPS.map((g) => {
+				const items = rows.filter(g.match);
+				if (items.length === 0) return null;
+				return (
+					<section key={g.key} className="flex flex-col gap-2">
+						<div>
+							<h2 className={`font-medium text-sm ${g.tone}`}>
+								{g.title} ({items.length})
+							</h2>
+							<p className="text-muted-foreground text-xs">{g.blurb}</p>
+						</div>
+						<ul className="divide-y rounded-md border">
+							{items.map((r) => (
+								<li
+									key={r.id}
+									className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2"
+								>
+									<div className="min-w-0">
+										<p className="truncate font-medium text-sm">
+											{r.deal?.name ?? r.company?.name ?? "—"}
+											{r.irreversible ? (
+												// A lapse cannot be undone by doing the work late,
+												// which is the whole reason it outranks overdue work.
+												<span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 font-normal text-red-700 text-xs dark:bg-red-950 dark:text-red-300">
+													lapses
+												</span>
+											) : null}
+										</p>
+										<p className="truncate text-muted-foreground text-xs">
+											{r.subject}
+										</p>
+									</div>
+									<div className="shrink-0 text-right">
+										<p className={`text-sm ${g.tone}`}>{when(r)}</p>
+										<p className="text-muted-foreground text-xs">{runway(r)}</p>
+									</div>
+								</li>
+							))}
+						</ul>
+					</section>
+				);
+			})}
+		</div>
+	);
+}

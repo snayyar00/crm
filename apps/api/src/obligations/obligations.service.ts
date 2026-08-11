@@ -43,6 +43,47 @@ const AUDIT_DELIVERABLES = [
 /** Contractual re-check interval for audit engagements. */
 const RECHECK_MONTHS = 6;
 
+/**
+ * How much RUNWAY each kind needs, in days — not how soon it is due.
+ *
+ * This lives in the DOMAIN service, not in the thing that emails you, because
+ * two consumers now depend on it (the morning alarm and the calendar screen) and
+ * a second copy would drift. A screen that disagreed with the alarm about what
+ * is urgent would make both untrustworthy.
+ *
+ * The numbers are the time needed to ACT: a trial lapse is unrecoverable and
+ * rescuing one means a conversation, a fix and a signature; an audit report you
+ * can write in a few days.
+ */
+export const LEAD_DAYS: Record<ObligationKind, number> = {
+	TRIAL_EXPIRY: 14,
+	RECHECK_DUE: 14,
+	VPAT_EXPIRY: 21,
+	LEGAL_DEADLINE: 14,
+	DELIVERABLE_DUE: 3,
+};
+/** An unknown kind gets the TIGHTEST window — a new kind should under-alarm
+ *  until someone gives it a considered lead time, not spam. */
+export const DEFAULT_LEAD_DAYS = 3;
+export const MAX_LEAD_DAYS = Math.max(...Object.values(LEAD_DAYS), DEFAULT_LEAD_DAYS);
+
+/** Kinds where missing the date destroys the thing itself. A late audit report
+ *  is late; a lapsed trial is over. */
+export const IRREVERSIBLE: ReadonlySet<string> = new Set<ObligationKind>([
+	"TRIAL_EXPIRY",
+	"LEGAL_DEADLINE",
+]);
+
+export function leadDaysFor(kind: string | undefined): number {
+	if (!kind) return DEFAULT_LEAD_DAYS;
+	return LEAD_DAYS[kind as ObligationKind] ?? DEFAULT_LEAD_DAYS;
+}
+
+export function daysUntil(d: Date | null, now = Date.now()): number {
+	if (!d) return Number.POSITIVE_INFINITY;
+	return Math.floor((d.getTime() - now) / 86_400_000);
+}
+
 @Injectable()
 export class ObligationsService {
 	private readonly logger = new Logger(ObligationsService.name);
@@ -281,7 +322,16 @@ export class ObligationsService {
 		});
 	}
 
-	/** Everything due or overdue, soonest first — the one list worth pushing. */
+	/**
+	 * Everything due or overdue inside the horizon, soonest first, ANNOTATED with
+	 * the urgency the alarm uses.
+	 *
+	 * The annotation is computed here rather than by each caller so there is one
+	 * definition of "urgent". `slack` is days of runway left: negative means the
+	 * work should already have started. The screen shows rows with positive slack
+	 * too — the alarm hides those on purpose, but a calendar that hid them would
+	 * just be the alarm with extra steps.
+	 */
 	async due(withinDays = 30) {
 		const horizon = this.addDays(new Date(), withinDays);
 		const rows = await this.db.activity.findMany({
@@ -289,9 +339,21 @@ export class ObligationsService {
 			orderBy: { dueAt: "asc" },
 			include: { deal: { select: { name: true, stage: true } }, company: { select: { name: true } } },
 		});
-		return rows.filter((r) => {
-			const meta = r.meta as { obligationKind?: string } | null;
-			return Boolean(meta?.obligationKind);
-		});
+		const now = Date.now();
+		return rows
+			.map((r) => {
+				const kind = (r.meta as { obligationKind?: string } | null)?.obligationKind;
+				const days = daysUntil(r.dueAt, now);
+				const lead = leadDaysFor(kind);
+				return {
+					...r,
+					kind,
+					daysUntilDue: days,
+					leadDays: lead,
+					slack: days - lead,
+					irreversible: IRREVERSIBLE.has(kind ?? ""),
+				};
+			})
+			.filter((r) => Boolean(r.kind));
 	}
 }
