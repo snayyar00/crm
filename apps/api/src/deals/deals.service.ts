@@ -375,6 +375,52 @@ export class DealsService {
 		}
 
 		if (deal.stage === input.stage) {
+			// A deal won BEFORE the engagement-type rule shipped carries no type, and
+			// this early return used to make that permanent: setStage refused to do
+			// anything for a stage it was already in, and no other endpoint accepts
+			// the field. So the obligations for every previously-won deal — including
+			// a signed audit SOW — could never be created at all.
+			//
+			// Naming the type on an already-won deal is therefore a real operation,
+			// not a no-op, and it spawns exactly what the original win would have.
+			// Still guarded: only CLOSED_WON, only when a type is actually supplied,
+			// and only when it CHANGES something.
+			if (
+				input.stage === "CLOSED_WON" &&
+				input.engagementType &&
+				input.engagementType !== deal.engagementType
+			) {
+				await this.db.deal.update({
+					where: { id: input.id },
+					data: { engagementType: input.engagementType },
+				});
+				let spawned: unknown = null;
+				try {
+					spawned = await this.obligations.spawnForWonDeal(
+						deal.id,
+						actingUserId,
+					);
+				} catch (err) {
+					this.logger.error({
+						message:
+							"Could not spawn obligations for a back-filled engagement type",
+						dealId: deal.id,
+						detail: err instanceof Error ? err.message : String(err),
+					});
+				}
+				this.logger.log({
+					message: "Engagement type recorded on an already-won deal",
+					dealId: deal.id,
+					engagementType: input.engagementType,
+					spawned,
+				});
+				return {
+					id: deal.id,
+					stage: deal.stage,
+					changed: false,
+					engagementTypeSet: input.engagementType,
+				};
+			}
 			return { id: deal.id, stage: deal.stage, changed: false };
 		}
 
