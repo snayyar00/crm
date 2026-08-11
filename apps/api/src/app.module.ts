@@ -15,6 +15,7 @@ import { CrmModule } from "./crm/crm.module";
 import { CurrencyModule } from "./currency/currency.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { DatabaseModule } from "./database/database.module";
+import { EmailModule } from "./email/email.module";
 import { DealsModule } from "./deals/deals.module";
 import { FieldsModule } from "./fields/fields.module";
 import { GoogleModule } from "./google/google.module";
@@ -34,6 +35,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 
 @Module({
 	imports: [
+		EmailModule,
 		LoggingModule,
 		ConfigModule.forRoot({
 			isGlobal: true,

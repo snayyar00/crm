@@ -1,0 +1,10 @@
+{
+  "name": "@crm/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "check-types": "tsc --noEmit", "lint": "biome check ." },
+  "dependencies": { "@crm/env": "workspace:*" },
+  "devDependencies": { "@crm/typescript-config": "workspace:*", "@types/node": "^24.0.0", "typescript": "^5.9.2" }
+}

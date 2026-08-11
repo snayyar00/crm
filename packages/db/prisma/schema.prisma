@@ -1315,3 +1315,52 @@ model SsoProvider {
   @@unique([providerId])
   @@map("ssoProvider")
 }
+
+/// A queued outbound email. Written by the UI, by an agent, or by a human;
+/// drained by the dispatcher in apps/api.
+///
+/// Defaults to DRAFT on purpose. Nothing leaves this system on a timer without
+/// somebody releasing it — a queue that sends by itself is one bad row away from
+/// mailing a customer the wrong thing.
+model EmailJob {
+  id String @id @default(cuid())
+
+  to      String[]
+  cc      String[]
+  subject String
+  body    String  @db.Text
+
+  /// Base64 attachments, [{ name, content }]. Kept small — big files belong in blob storage.
+  attachments Json?
+
+  status   EmailJobStatus @default(DRAFT)
+  dueAt    DateTime?
+  sentAt   DateTime?
+  attempts Int            @default(0)
+  error    String?
+  /// Provider message id, once accepted.
+  messageId String?
+
+  /// Optional CRM links, so a send logs itself as an Activity.
+  dealId    String?
+  contactId String?
+  companyId String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, dueAt])
+  @@map("emailJob")
+}
+
+enum EmailJobStatus {
+  /// Written, but nobody has approved it. Never sent from this state.
+  DRAFT
+  /// Released for sending; the dispatcher will pick it up at dueAt.
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}

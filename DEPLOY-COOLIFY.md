@@ -137,3 +137,36 @@ Vercel the agent has no model until `AI_GATEWAY_API_KEY` is set.
 
 The API sends one event of counts per day by default. Set `CRM_TELEMETRY_DISABLED="1"` to
 stop it.
+
+## Outbound email (Brevo)
+
+The CRM can queue and send email. Brevo rather than Resend because
+`support@webability.io` is **already a verified Brevo sender** — no new SPF/DKIM records on a
+domain that already carries live customer mail, and replies come from the address customers
+already correspond with.
+
+```
+BREVO_API_KEY     required — without it dispatch is a logged no-op, never a silent one
+EMAIL_FROM        defaults to support@webability.io
+EMAIL_FROM_NAME   defaults to WebAbility
+```
+
+**Everything lands as `DRAFT`.** `emails.draft` cannot queue; only `emails.release` moves a row
+to `QUEUED`, and the dispatcher only ever reads `QUEUED`. A queue that mails on a timer is one
+bad row away from sending a customer the wrong thing.
+
+Drain it with a scheduled task on the api resource, same bearer contract as the mailbox route:
+
+```sh
+curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  https://api.crm.server.techywebsolutions.com/internal/sync/emails
+```
+
+A send that succeeds writes an `EMAIL` Activity against whichever of
+`dealId`/`contactId`/`companyId` the job carried. Three consecutive failures move the row to
+`FAILED` and stop — retrying a rejected send forever only burns credits.
+
+**It cannot reply into an existing Gmail thread.** Brevo has no visibility of a Gmail thread id,
+so a reply sent this way opens a new conversation on the recipient's side and never appears in
+the sender's Gmail sent folder. Use it for new outbound and automation; use the `gog` CLI for
+replies to live conversations.
