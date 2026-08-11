@@ -8,6 +8,7 @@ import {
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { blankToNull } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
+import { ObligationsService } from "../obligations/obligations.service";
 import type {
 	ActivityCreateInput,
 	MyTasksInput,
@@ -71,6 +72,7 @@ export class ActivitiesService {
 	constructor(
 		@InjectDatabase() private readonly db: Db,
 		private readonly stamp: ActivityStampService,
+		private readonly obligations: ObligationsService,
 	) {}
 
 	async timeline(input: TimelineInput) {
@@ -159,7 +161,7 @@ export class ActivitiesService {
 	async complete(id: string, completed: boolean) {
 		const activity = await this.db.activity.findUnique({
 			where: { id },
-			select: { type: true },
+			select: { type: true, completedAt: true },
 		});
 
 		if (!activity) {
@@ -170,10 +172,39 @@ export class ActivitiesService {
 			throw new BadRequestException("Only tasks can be completed.");
 		}
 
-		const updated = await this.db.activity.update({
-			where: { id },
-			data: { completedAt: completed ? new Date() : null },
-			select: ENTRY_SELECT,
+		// The write and the obligation lifecycle share ONE transaction. Two separate
+		// writes would reproduce the exact bug being fixed — "completion succeeded,
+		// the successor never appeared" — just less often and harder to see.
+		const wasCompleted = activity.completedAt !== null;
+		const updated = await this.db.$transaction(async (tx) => {
+			// ORDER IS LOAD-BEARING, and getting it wrong throws a raw P2002.
+			// The partial unique index allows only ONE OPEN row per obligation key.
+			//   Re-opening: the successor still holds the key, so it must be deleted
+			//   BEFORE this row becomes open again.
+			//   Completing: this row holds the key until it is closed, so the
+			//   successor can only be created AFTER the update.
+			if (!completed) {
+				await this.obligations.handleCompletionChange(
+					tx as unknown as Db,
+					id,
+					wasCompleted,
+					false,
+				);
+			}
+			const row = await tx.activity.update({
+				where: { id },
+				data: { completedAt: completed ? new Date() : null },
+				select: ENTRY_SELECT,
+			});
+			if (completed) {
+				await this.obligations.handleCompletionChange(
+					tx as unknown as Db,
+					id,
+					wasCompleted,
+					true,
+				);
+			}
+			return row;
 		});
 
 		return serializeEntry(updated);

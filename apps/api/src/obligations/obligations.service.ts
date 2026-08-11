@@ -1,5 +1,5 @@
 import { InjectDatabase } from "../database/database.constants";
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { Db } from "@crm/db";
 
 /**
@@ -11,9 +11,13 @@ import type { Db } from "@crm/db";
  *
  * What makes these different from an ordinary task is LIFECYCLE, and that lives
  * here rather than in the schema:
+ *   - RECHECK_DUE regenerates: closing one spawns the next. IMPLEMENTED, in
+ *     handleCompletionChange, hooked into the single place completedAt is written.
  *   - TRIAL_EXPIRY does not "complete" — it lapses, and lapsing is the alarm.
- *   - RECHECK_DUE regenerates: closing one spawns the next.
- *   - VPAT_EXPIRY supersedes: a new version closes the old clock and opens one.
+ *     Completing one is DISMISSAL: the nag stops, nothing is spawned. Refusing to
+ *     let a one-person shop silence a nag would just train them around the tool.
+ *   - VPAT_EXPIRY would supersede, but NOTHING SPAWNS ONE TODAY, so no lifecycle
+ *     is written for it. Do not add rules for a kind with no rows.
  *
  * If these rows were only ever hand-typed, the kind would be decoration. They are
  * created from events instead — see spawnForWonDeal and spawnForTrial.
@@ -320,6 +324,90 @@ export class ObligationsService {
 			companyId: input.companyId,
 			createdById: input.createdById,
 		});
+	}
+
+	/**
+	 * React to a task's completion flag changing. Called from ActivitiesService
+	 * INSIDE its transaction — obligations own the rules, activities own the write.
+	 *
+	 * It lives on the completion path rather than behind its own mutation because
+	 * the generic `activities.complete` is what the UI already calls. A separate
+	 * `obligations.close` would leave the generic door open and kind-blind, which
+	 * is the bug being fixed: today the founder ticks off the 6-month re-check —
+	 * "the one that is pure recurring revenue, and the easiest to lose" — and the
+	 * next one never appears. Completing it correctly is what destroys it.
+	 *
+	 * The caller passes `wasCompleted` so this only fires on a real TRANSITION. A
+	 * second click on an already-completed task must not re-date the successor.
+	 */
+	async handleCompletionChange(tx: Db, activityId: string, wasCompleted: boolean, nowCompleted: boolean) {
+		if (wasCompleted === nowCompleted) return { spawned: null, deleted: null };
+
+		const row = await tx.activity.findUnique({ where: { id: activityId } });
+		const meta = (row?.meta ?? null) as { obligationKind?: string; obligationKey?: string } | null;
+		if (!row || !meta?.obligationKind) return { spawned: null, deleted: null };
+
+		if (nowCompleted) return this.spawnSuccessor(tx, row, meta);
+		return this.unspawnSuccessor(tx, row);
+	}
+
+	/**
+	 * Dated from the COMPLETION, not from the original due date. A re-check
+	 * verifies the site's current state, so the next one is meaningful six months
+	 * after the last ACTUAL check. Anchoring to the old due date would compress
+	 * every cycle by however late the close was — and closing more than six months
+	 * late would spawn a successor that is born overdue.
+	 */
+	private async spawnSuccessor(tx: Db, row: { id: string; subject: string | null; body: string | null; dealId: string | null; companyId: string | null; createdById: string }, meta: { obligationKind?: string; obligationKey?: string }) {
+		if (meta.obligationKind !== "RECHECK_DUE") return { spawned: null, deleted: null };
+
+		const dueAt = this.addMonths(new Date(), RECHECK_MONTHS);
+		try {
+			const next = await tx.activity.create({
+				data: {
+					type: "TASK",
+					subject: row.subject,
+					body: `Contractual ${RECHECK_MONTHS}-month re-check. Reach out ~4 weeks before it falls due.`,
+					dueAt,
+					occurredAt: new Date(),
+					dealId: row.dealId,
+					companyId: row.companyId,
+					createdById: row.createdById,
+					meta: {
+						obligationKind: "RECHECK_DUE",
+						obligationKey: meta.obligationKey,
+						spawnedBy: "obligations.lifecycle",
+						// The link that makes un-completing reversible.
+						spawnedFrom: row.id,
+					},
+				},
+			});
+			return { spawned: next.id, deleted: null };
+		} catch (err) {
+			// P2002 = the partial unique index already has an OPEN row for this key,
+			// so a successor exists. A concurrent double-click is a no-op, not a 500.
+			if ((err as { code?: string }).code === "P2002") return { spawned: null, deleted: null };
+			throw err;
+		}
+	}
+
+	/**
+	 * Re-opening a completed re-check must first remove the successor its closure
+	 * created, or the partial unique index rejects the re-open with a raw P2002.
+	 * Deleting inside the same transaction is what keeps that from surfacing.
+	 */
+	private async unspawnSuccessor(tx: Db, row: { id: string }) {
+		const successor = await tx.activity.findFirst({
+			where: { type: "TASK", meta: { path: ["spawnedFrom"], equals: row.id } },
+		});
+		if (!successor) return { spawned: null, deleted: null };
+		if (successor.completedAt) {
+			throw new BadRequestException(
+				"The next re-check spawned by this one has already been actioned. Re-open that one instead.",
+			);
+		}
+		await tx.activity.delete({ where: { id: successor.id } });
+		return { spawned: null, deleted: successor.id };
 	}
 
 	/**
