@@ -15,6 +15,7 @@ import {
 } from "./scopes";
 import { notifySignedIn } from "./signed-in";
 import {
+	googleHostedDomain,
 	hasSignInAllowList,
 	isWorkspaceEmail,
 	primaryWorkspaceDomain,
@@ -30,7 +31,7 @@ if (env.google) {
 
 		accessType: "offline",
 
-		...(primaryWorkspaceDomain() ? { hd: primaryWorkspaceDomain() } : {}),
+		...(googleHostedDomain() ? { hd: googleHostedDomain() } : {}),
 	};
 }
 
