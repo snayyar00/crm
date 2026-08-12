@@ -26,7 +26,7 @@ const EXTERNAL_CRONS = [
 	{
 		id: "crm-reply-watch",
 		name: "Inbound-reply Slack alert",
-		where: "Sid's Mac (crontab, every 15 min; moving to CRM host)",
+		where: "CRM host (root crontab, every 15 min)",
 		purpose:
 			"Posts to #crm-deals when the Gmail sync ingests an inbound email on a tracked company or deal.",
 		expectEveryMinutes: 35,
