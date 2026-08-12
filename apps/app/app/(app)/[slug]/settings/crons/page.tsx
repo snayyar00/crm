@@ -180,10 +180,10 @@ async function Crons() {
 						{data.external.map((c) => (
 							<TableRow key={c.id}>
 								<TableCell>{c.name}</TableCell>
-								<TableCell className="text-muted-foreground">
+								<TableCell className="whitespace-normal text-muted-foreground">
 									{c.where}
 								</TableCell>
-								<TableCell className="max-w-96 text-muted-foreground">
+								<TableCell className="max-w-96 whitespace-normal text-muted-foreground">
 									{c.purpose}
 								</TableCell>
 								<TableCell>{when(c.lastBeatAt)}</TableCell>
