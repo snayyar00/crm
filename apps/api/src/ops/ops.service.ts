@@ -18,7 +18,7 @@ const EXTERNAL_CRONS = [
 	{
 		id: "crm-ads-sync",
 		name: "Ads/GTM state → CRM note",
-		where: "Sid's Mac (crontab, hourly at :26)",
+		where: "Sid's Mac (launchd agent, hourly at :26)",
 		purpose:
 			"Auto-syncs ads readiness (GTM, spend gates) into the 'Ads readiness state' note on the Webability company; Hermes reads it in Slack.",
 		expectEveryMinutes: 75,
