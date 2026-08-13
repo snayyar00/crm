@@ -12,8 +12,11 @@ function base64url(buffer: Buffer): string {
 
 /** account-d for the demo environment, account for production. */
 function authHost(): string {
-	const base = process.env.DOCUSIGN_BASE_URL ?? "https://demo.docusign.net/restapi";
-	return base.includes("demo") ? "account-d.docusign.com" : "account.docusign.com";
+	const base =
+		process.env.DOCUSIGN_BASE_URL ?? "https://demo.docusign.net/restapi";
+	return base.includes("demo")
+		? "account-d.docusign.com"
+		: "account.docusign.com";
 }
 
 function createJwt(
@@ -78,9 +81,14 @@ async function getAccessToken(
 	}
 
 	const userInfo = (await accountsRes.json()) as {
-		accounts: Array<{ account_id: string; base_uri: string; is_default: boolean }>;
+		accounts: Array<{
+			account_id: string;
+			base_uri: string;
+			is_default: boolean;
+		}>;
 	};
-	const account = userInfo.accounts.find((a) => a.is_default) ?? userInfo.accounts[0];
+	const account =
+		userInfo.accounts.find((a) => a.is_default) ?? userInfo.accounts[0];
 
 	return {
 		token: data.access_token,
@@ -121,7 +129,8 @@ export default defineTool({
 
 		if (!clientId || !userId || !accountId || !privateKey) {
 			return {
-				error: "DocuSign not configured — set DOCUSIGN_CLIENT_ID, DOCUSIGN_USER_ID, DOCUSIGN_ACCOUNT_ID, and DOCUSIGN_PRIVATE_KEY in .env",
+				error:
+					"DocuSign not configured — set DOCUSIGN_CLIENT_ID, DOCUSIGN_USER_ID, DOCUSIGN_ACCOUNT_ID, and DOCUSIGN_PRIVATE_KEY in .env",
 			};
 		}
 
@@ -155,7 +164,8 @@ export default defineTool({
 				],
 			});
 
-			const providerName = process.env.DOCUSIGN_PROVIDER_SIGNER_NAME ?? "Sidharth Nayyar";
+			const providerName =
+				process.env.DOCUSIGN_PROVIDER_SIGNER_NAME ?? "Sidharth Nayyar";
 			const providerEmail =
 				process.env.DOCUSIGN_PROVIDER_SIGNER_EMAIL ?? "support@webability.io";
 
@@ -209,7 +219,9 @@ export default defineTool({
 
 			if (!res.ok) {
 				const body = await res.text();
-				return { error: `DocuSign envelope creation failed (${res.status}): ${body}` };
+				return {
+					error: `DocuSign envelope creation failed (${res.status}): ${body}`,
+				};
 			}
 
 			const result = (await res.json()) as {

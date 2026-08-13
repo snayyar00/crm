@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { listFields } from "../lib/fields";
+import { listFields, NATIVE_DEAL_FIELDS } from "../lib/fields";
 
 export default defineTool({
 	description:
@@ -22,6 +22,15 @@ export default defineTool({
 				brief: field.agentBrief,
 				options: field.options.map((option) => option.label),
 			})),
+			nativeFields:
+				entity === "DEAL"
+					? NATIVE_DEAL_FIELDS.map((field) => ({
+							key: field.key,
+							label: field.label,
+							type: field.type,
+							brief: field.brief,
+						}))
+					: [],
 			note:
 				fields.length === 0
 					? "This workspace has no custom fields on this record type yet."

@@ -1,4 +1,5 @@
-import { db } from "@crm/db";
+import { db, Prisma } from "@crm/db";
+import { isCurrencyCode, normalizeCurrency } from "@crm/db/currency";
 import type { FieldEntity, FieldType } from "@crm/db/enums";
 import {
 	attachValues,
@@ -12,6 +13,8 @@ import {
 	usesOptions,
 	writeValues,
 } from "@crm/db/fields";
+import { convertToBase } from "@crm/db/fx";
+import { readReportingCurrency } from "@crm/db/settings";
 
 const WITH_OPTIONS = { options: { orderBy: { position: "asc" } } } as const;
 
@@ -52,6 +55,130 @@ export type WriteResult =
 	| { written: true; key: string; value: unknown }
 	| { written: false; reason: string };
 
+const MAX_DEAL_AMOUNT = 999_999_999_999.99;
+
+export const NATIVE_DEAL_FIELDS = [
+	{
+		key: "amount",
+		label: "Amount",
+		type: "NUMBER",
+		brief:
+			"What the customer pays, in units of the deal's currency. A number, 0 or more, or null to clear.",
+	},
+	{
+		key: "currency",
+		label: "Currency",
+		type: "TEXT",
+		brief: "Three-letter currency code, e.g. USD or EUR.",
+	},
+	{
+		key: "expected_close_date",
+		label: "Expected close",
+		type: "DATE",
+		brief: "When the deal is expected to close, YYYY-MM-DD, or null to clear.",
+	},
+] as const;
+
+const NATIVE_DEAL_KEYS = new Set<string>(
+	NATIVE_DEAL_FIELDS.map((field) => field.key),
+);
+
+async function writeNativeDealField(
+	recordId: string,
+	key: string,
+	value: unknown,
+): Promise<WriteResult> {
+	const deal = await db.deal.findUnique({
+		where: { id: recordId },
+		select: { amount: true, currency: true },
+	});
+
+	if (!deal) {
+		return { written: false, reason: `No deal with id ${recordId}.` };
+	}
+
+	if (key === "expected_close_date") {
+		if (value === null) {
+			await db.deal.update({
+				where: { id: recordId },
+				data: { expectedCloseDate: null },
+			});
+			return { written: true, key, value };
+		}
+
+		if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+			return {
+				written: false,
+				reason: "expected_close_date takes YYYY-MM-DD, or null to clear it.",
+			};
+		}
+
+		const date = new Date(`${value}T00:00:00.000Z`);
+		if (Number.isNaN(date.getTime())) {
+			return { written: false, reason: `"${value}" is not a real date.` };
+		}
+
+		await db.deal.update({
+			where: { id: recordId },
+			data: { expectedCloseDate: date },
+		});
+		return { written: true, key, value };
+	}
+
+	let amount = deal.amount;
+	let currency = normalizeCurrency(deal.currency);
+
+	if (key === "amount") {
+		if (value === null) {
+			amount = null;
+		} else if (
+			typeof value === "number" &&
+			Number.isFinite(value) &&
+			value >= 0 &&
+			value <= MAX_DEAL_AMOUNT
+		) {
+			amount = new Prisma.Decimal(value.toFixed(2));
+		} else {
+			return {
+				written: false,
+				reason:
+					"amount takes a number of currency units, 0 or more, or null to clear it.",
+			};
+		}
+	}
+
+	if (key === "currency") {
+		if (typeof value !== "string" || !isCurrencyCode(value)) {
+			return {
+				written: false,
+				reason: `"${String(value)}" is not a supported currency code. Use one of the codes in Settings → Currencies, e.g. USD or EUR.`,
+			};
+		}
+		currency = normalizeCurrency(value);
+	}
+
+	const converted = await convertToBase(
+		db,
+		amount,
+		currency,
+		await readReportingCurrency(db),
+	);
+
+	await db.deal.update({
+		where: { id: recordId },
+		data: {
+			amount,
+			currency,
+			baseAmount: converted?.baseAmount ?? null,
+			baseCurrency: converted?.baseCurrency ?? null,
+			fxRate: converted?.fxRate ?? null,
+			fxRateAt: converted?.fxRateAt ?? null,
+		},
+	});
+
+	return { written: true, key, value };
+}
+
 export async function writeField(input: {
 	entity: FieldEntity;
 	recordId: string;
@@ -62,6 +189,10 @@ export async function writeField(input: {
 	const definition = definitions.find((entry) => entry.key === input.key);
 
 	if (!definition) {
+		if (input.entity === "DEAL" && NATIVE_DEAL_KEYS.has(input.key)) {
+			return writeNativeDealField(input.recordId, input.key, input.value);
+		}
+
 		return {
 			written: false,
 			reason: `There is no field called "${input.key}" on ${input.entity.toLowerCase()}s. Call list_fields to see what exists.`,

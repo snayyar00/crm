@@ -5,7 +5,7 @@ import { focusOn } from "../lib/focus";
 
 export default defineTool({
 	description:
-		"Set one custom field on one record, when you have read the answer from a source rather than guessed it. The field's brief says what would count — follow it. Call list_fields first if you do not know the key. A field the rep marked manual will refuse.",
+		"Set one field on one record, when you have read the answer from a source rather than guessed it. Covers the workspace's custom fields, plus a deal's native amount, currency and expected_close_date. The field's brief says what would count — follow it. Call list_fields first if you do not know the key. A field the rep marked manual will refuse.",
 	inputSchema: z.object({
 		entity: z.enum(["COMPANY", "CONTACT", "DEAL"]),
 		recordId: z.string().describe("The id of the company, contact or deal."),

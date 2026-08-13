@@ -4,7 +4,10 @@ import { z } from "zod";
 
 type Deliverable = { name: string; desc: string };
 
-function auditDeliverables(client: string, recheckMonths: number): Deliverable[] {
+function auditDeliverables(
+	client: string,
+	recheckMonths: number,
+): Deliverable[] {
 	return [
 		{
 			name: "Detailed audit report",
@@ -80,7 +83,7 @@ function parseNoteHints(
 
 	const hints: Record<string, unknown> = {};
 
-	const dlMatch = full.match(/deliverables?\s*[:\-]\s*(.+?)(?:\n|$)/i);
+	const dlMatch = full.match(/deliverables?\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (dlMatch?.[1]) {
 		hints.deliverables = dlMatch[1]
 			.split(/[,;]/)
@@ -98,26 +101,24 @@ function parseNoteHints(
 		};
 	}
 
-	const pagesMatch = full.match(/scope\s+pages?\s*[:\-]\s*(.+?)(?:\n|$)/i);
+	const pagesMatch = full.match(/scope\s+pages?\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (pagesMatch?.[1]) hints.scopePages = pagesMatch[1].trim();
 
-	const targetMatch = full.match(/scope\s+target\s*[:\-]\s*(.+?)(?:\n|$)/i);
+	const targetMatch = full.match(/scope\s+target\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (targetMatch?.[1]) hints.scopeTarget = targetMatch[1].trim();
 
-	const bgMatch = full.match(/sow\s+background\s*[:\-]\s*(.+?)(?:\n|$)/i);
+	const bgMatch = full.match(/sow\s+background\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (bgMatch?.[1]) hints.background = bgMatch[1].trim();
 
 	// e.g. "remediation window: 8 months" — stretches the remediation phase.
-	const remMatch = full.match(
-		/remediation\s+window\s*[:\-]\s*(\d+)\s*months?/i,
-	);
+	const remMatch = full.match(/remediation\s+window\s*[:-]\s*(\d+)\s*months?/i);
 	if (remMatch?.[1]) hints.remediationMonths = Number.parseInt(remMatch[1], 10);
 
 	// e.g. "fee note: Phase 2 (+$4,000) and Phase 3 (+$2,000) available..."
-	const feeNoteMatch = full.match(/fee\s+note\s*[:\-]\s*(.+?)(?:\n|$)/i);
+	const feeNoteMatch = full.match(/fee\s+note\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (feeNoteMatch?.[1]) hints.feeNote = feeNoteMatch[1].trim();
 
-	const termsMatch = full.match(/special\s+terms?\s*[:\-]\s*(.+?)(?:\n|$)/i);
+	const termsMatch = full.match(/special\s+terms?\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (termsMatch?.[1]) hints.specialTerms = termsMatch[1].trim();
 
 	return hints as ReturnType<typeof parseNoteHints>;
@@ -141,10 +142,7 @@ export default defineTool({
 	description:
 		"Generate a branded Statement of Work PDF from a CRM deal, matching the signed Questback SOW design (navy cover, 14 numbered sections, deliverables/timeline tables, fee banner, execution block with DocuSign anchors). Reads the deal, its engagementType, company, contacts, and recent NOTES for hints (scope pages/target, discount, 'remediation window: N months', 'fee note: ...', 'sow background: ...'). Returns the PDF path in the sandbox.",
 	inputSchema: z.object({
-		dealId: z
-			.string()
-			.min(1)
-			.describe("The CRM deal id to generate a SOW for"),
+		dealId: z.string().min(1).describe("The CRM deal id to generate a SOW for"),
 	}),
 	async execute(input, ctx) {
 		const deal = await db.deal.findUnique({
@@ -220,9 +218,10 @@ export default defineTool({
 		const discountBanner =
 			hints.discount && deal.amount
 				? `Includes a ${hints.discount.percent}% discount from the standard fee of $${(
-						Number(deal.amount) /
-						(1 - hints.discount.percent / 100)
-					).toFixed(0)}, valid if this SOW is signed on or before <strong>${hints.discount.deadline}</strong>. After that date the standard fee applies.`
+						Number(deal.amount) / (1 - hints.discount.percent / 100)
+					).toFixed(
+						0,
+					)}, valid if this SOW is signed on or before <strong>${hints.discount.deadline}</strong>. After that date the standard fee applies.`
 				: undefined;
 
 		const remediationSummary = remMonths
@@ -285,7 +284,9 @@ export default defineTool({
 
 		const deliverables: Deliverable[] | string[] =
 			hints.deliverables ??
-			(isAudit ? auditDeliverables(clientName, recheckMonths) : subscriptionDeliverables());
+			(isAudit
+				? auditDeliverables(clientName, recheckMonths)
+				: subscriptionDeliverables());
 
 		const config = {
 			sow_ref: sowRef,
@@ -355,7 +356,9 @@ export default defineTool({
 				amount: Number(deal.amount ?? 0),
 				currency: deal.currency ?? "USD",
 				payment_terms: "Net 15",
-				label: isAudit ? "All-Inclusive Engagement Fee" : "Annual Subscription Fee",
+				label: isAudit
+					? "All-Inclusive Engagement Fee"
+					: "Annual Subscription Fee",
 				banner_note: hints.feeNote ?? discountBanner,
 			},
 			fee_terms: [

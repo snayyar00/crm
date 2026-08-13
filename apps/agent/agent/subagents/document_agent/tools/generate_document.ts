@@ -29,18 +29,25 @@ export default defineTool({
 			.string()
 			.optional()
 			.describe("Optional blue second title line, e.g. the client name"),
-		subtitle: z.string().optional().describe("One-line descriptor under the title"),
+		subtitle: z
+			.string()
+			.optional()
+			.describe("One-line descriptor under the title"),
 		docType: z
 			.string()
 			.default("Document")
 			.describe('Header label, e.g. "Proposal", "Guide", "Report"'),
-		reference: z.string().optional().describe('Reference code, e.g. "PROP-2026-0042"'),
+		reference: z
+			.string()
+			.optional()
+			.describe('Reference code, e.g. "PROP-2026-0042"'),
 		date: z.string().optional().describe('Issue date, e.g. "August 13, 2026"'),
 		preparedFor: z.string().optional(),
-		preparedBy: z
-			.string()
-			.default("WebAbility.io · Sidharth Nayyar, Founder"),
-		cover: z.boolean().default(true).describe("false = skip the navy cover page"),
+		preparedBy: z.string().default("WebAbility.io · Sidharth Nayyar, Founder"),
+		cover: z
+			.boolean()
+			.default(true)
+			.describe("false = skip the navy cover page"),
 		filename: z
 			.string()
 			.regex(/^[A-Za-z0-9._-]+\.pdf$/)
