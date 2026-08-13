@@ -389,6 +389,36 @@ export class ObligationsService {
 	 * A trial expiry does not complete — it lapses. The obligation exists so the
 	 * lapse is visible before it happens, not after.
 	 */
+	async spawnFromEmail(input: {
+		companyId: string;
+		dealId?: string;
+		threadId: string;
+		title: string;
+		body: string;
+		dueAt: Date;
+		createdById: string;
+	}) {
+		// Deliberately hard-wired to COMMITMENT. An extractor reading free text must
+		// never be able to mint a TRIAL_EXPIRY or a LEGAL_DEADLINE - those carry long
+		// lead times and an irreversible flag, and a hallucinated one would sit at the
+		// top of the morning digest claiming a legal deadline that does not exist.
+		//
+		// The slug is the THREAD id, not the message id: a thread that keeps discussing
+		// the same promise must resolve to one obligation, not one per reply. ensure()
+		// dedupes on that key, so re-reading the same thread is a no-op.
+		return this.ensure({
+			kind: "COMMITMENT",
+			slug: `email-${input.threadId}`,
+			scope: input.dealId ? "deal" : "company",
+			title: input.title,
+			body: input.body,
+			dueAt: input.dueAt,
+			dealId: input.dealId,
+			companyId: input.companyId,
+			createdById: input.createdById,
+		});
+	}
+
 	async spawnForTrial(input: {
 		companyId: string;
 		dealId?: string;

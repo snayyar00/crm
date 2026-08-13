@@ -3,6 +3,8 @@ import { db, type MailboxSyncModel as MailboxSync } from "@crm/db";
 import type { AgentTriggerService } from "../src/agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../src/companies/company-directory.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
+import { CommitmentExtractorService } from "../src/mailbox/commitment-extractor.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 import { EnrichmentLogService } from "../src/crm/enrichment-log.service";
 import { MailboxMatchService } from "../src/mailbox/mailbox-match.service";
 import {
@@ -28,7 +30,11 @@ const stamp = new ActivityStampService(db);
 const directory = new CompanyDirectoryService(db, agent);
 const log = new EnrichmentLogService(db, stamp);
 const match = new MailboxMatchService(db, directory, agent, log);
-const threads = new ThreadWriterService(db, match, stamp);
+// Extraction is inert in this test: no AI_GATEWAY_API_KEY means extract() returns []
+// without a network call, so the writer's storage behaviour is what is under test.
+const commitments = new CommitmentExtractorService();
+const obligations = new ObligationsService(db);
+const threads = new ThreadWriterService(db, match, stamp, commitments, obligations);
 
 let row: MailboxSync;
 

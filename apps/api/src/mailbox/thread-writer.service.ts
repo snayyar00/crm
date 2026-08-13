@@ -9,6 +9,8 @@ import {
 } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { ActivityStampService } from "../crm/activity-stamp.service";
+import { ObligationsService } from "../obligations/obligations.service";
+import { CommitmentExtractorService } from "./commitment-extractor.service";
 import { InjectDatabase } from "../database/database.constants";
 import type { SyncSource } from "./mailbox.constants";
 import {
@@ -39,6 +41,8 @@ export class ThreadWriterService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly match: MailboxMatchService,
 		private readonly stamp: ActivityStampService,
+		private readonly commitments: CommitmentExtractorService,
+		private readonly obligations: ObligationsService,
 	) {}
 
 	async context(): Promise<MatchContext> {
@@ -119,6 +123,8 @@ export class ThreadWriterService {
 		}
 
 		let occurredAt: Date;
+		// captured inside the transaction so the post-commit extraction can key on it
+		let storedThreadId = "";
 
 		try {
 			occurredAt = await this.db.$transaction(async (tx) => {
@@ -140,7 +146,9 @@ export class ThreadWriterService {
 						});
 
 				if (!repair) {
-					await tx.emailMessage.create({
+					storedThreadId = record.id;
+
+				await tx.emailMessage.create({
 						data: {
 							threadId: record.id,
 							rfcMessageId: parsed.rfcMessageId,
@@ -200,7 +208,70 @@ export class ThreadWriterService {
 
 		await this.touch({ companyId, contactId }, occurredAt, parsed.rfcMessageId);
 
+		// Read what the mail SAID, not just that it arrived. Deliberately AFTER the
+		// transaction commits and deliberately unawaited-by-value: a model call must
+		// never hold a DB transaction open, and must never fail a sync that has
+		// already stored the message correctly.
+		if (!repair && companyId) {
+			await this.extractCommitments({
+				threadId: storedThreadId,
+				companyId,
+				parsed,
+				userId: row.userId,
+			});
+		}
+
 		return !repair;
+	}
+
+	/** Never throws - a failed extraction must not fail the mailbox sync. */
+	private async extractCommitments(input: {
+		threadId: string;
+		companyId: string;
+		parsed: IncomingMessage;
+		userId: string;
+	}): Promise<void> {
+		try {
+			const company = await this.db.company.findUnique({
+				where: { id: input.companyId },
+				select: { name: true },
+			});
+
+			const found = await this.commitments.extract({
+				subject: input.parsed.subject ?? "",
+				body: input.parsed.body ?? "",
+				fromEmail: input.parsed.from.email,
+				companyName: company?.name ?? "(unknown)",
+				sentAt: input.parsed.sentAt,
+			});
+
+			for (const c of found) {
+				await this.obligations.spawnFromEmail({
+					companyId: input.companyId,
+					threadId: input.threadId,
+					title: c.title,
+					// The quote is the audit trail: when an obligation looks wrong, this
+					// is how you tell a real commitment from a hallucinated one.
+					body: `From ${input.parsed.from.email}: "${c.evidence}"`,
+					dueAt: new Date(`${c.dueDate}T09:00:00Z`),
+					createdById: input.userId,
+				});
+			}
+
+			if (found.length > 0) {
+				this.logger.log({
+					message: "Commitments extracted from email",
+					threadId: input.threadId,
+					count: found.length,
+				});
+			}
+		} catch (error) {
+			this.logger.warn({
+				message: "Commitment extraction failed; the email is still stored",
+				threadId: input.threadId,
+				error,
+			});
+		}
 	}
 
 	private async storedElsewhere(
