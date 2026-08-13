@@ -1,14 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import {
+	type ExtractedCommitment,
 	filterCommitments,
 	looksLikeCalendarInvite,
 	MIN_CONFIDENCE,
-	type ExtractedCommitment,
 } from "../src/mailbox/commitment-extractor.service";
 
 const TODAY = "2026-08-12";
 
-const commitment = (over: Partial<ExtractedCommitment> = {}): ExtractedCommitment => ({
+const commitment = (
+	over: Partial<ExtractedCommitment> = {},
+): ExtractedCommitment => ({
 	owner: "us",
 	title: "Send the audit report",
 	dueDate: "2026-08-20",
@@ -24,30 +26,48 @@ describe("commitment extraction thresholds", () => {
 	});
 
 	it("drops politeness read as obligation - 'let us know if there is any update' scored 0.3", () => {
-		const noise = commitment({ title: "Provide update on tax return", confidence: 0.3 });
+		const noise = commitment({
+			title: "Provide update on tax return",
+			confidence: 0.3,
+		});
 		expect(filterCommitments([noise], TODAY)).toEqual([]);
 	});
 
 	it("drops anything under the confidence floor, exactly at the boundary", () => {
-		expect(filterCommitments([commitment({ confidence: MIN_CONFIDENCE - 0.01 })], TODAY)).toEqual([]);
-		expect(filterCommitments([commitment({ confidence: MIN_CONFIDENCE })], TODAY)).toHaveLength(1);
+		expect(
+			filterCommitments(
+				[commitment({ confidence: MIN_CONFIDENCE - 0.01 })],
+				TODAY,
+			),
+		).toEqual([]);
+		expect(
+			filterCommitments([commitment({ confidence: MIN_CONFIDENCE })], TODAY),
+		).toHaveLength(1);
 	});
 
 	it("drops a due date in the past - that is a misread, not work", () => {
-		expect(filterCommitments([commitment({ dueDate: "2026-08-01" })], TODAY)).toEqual([]);
+		expect(
+			filterCommitments([commitment({ dueDate: "2026-08-01" })], TODAY),
+		).toEqual([]);
 	});
 
 	it("drops a malformed or invented date", () => {
-		expect(filterCommitments([commitment({ dueDate: "next week" })], TODAY)).toEqual([]);
+		expect(
+			filterCommitments([commitment({ dueDate: "next week" })], TODAY),
+		).toEqual([]);
 		expect(filterCommitments([commitment({ dueDate: "" })], TODAY)).toEqual([]);
 	});
 
 	it("requires evidence, because it is the only audit trail for a wrong extraction", () => {
-		expect(filterCommitments([commitment({ evidence: "" })], TODAY)).toEqual([]);
+		expect(filterCommitments([commitment({ evidence: "" })], TODAY)).toEqual(
+			[],
+		);
 	});
 
 	it("drops an empty title", () => {
-		expect(filterCommitments([commitment({ title: "   " })], TODAY)).toEqual([]);
+		expect(filterCommitments([commitment({ title: "   " })], TODAY)).toEqual(
+			[],
+		);
 	});
 });
 
@@ -57,7 +77,10 @@ describe("calendar invites are excluded", () => {
 	const invites: [string, string][] = [
 		["Invitation: Riipen FuturePath Discovery @ Wed Sep 16", ""],
 		["You booked a meeting with: Andrew Nguyen", ""],
-		["Re: something", "New Meeting Booked with Andrew Nguyen ... Date / time September 16"],
+		[
+			"Re: something",
+			"New Meeting Booked with Andrew Nguyen ... Date / time September 16",
+		],
 		["Accepted: WCAG sync", ""],
 		["anything", "BEGIN:VCALENDAR\nVERSION:2.0"],
 	];

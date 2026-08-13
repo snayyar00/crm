@@ -3,14 +3,14 @@ import { db, type MailboxSyncModel as MailboxSync } from "@crm/db";
 import type { AgentTriggerService } from "../src/agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../src/companies/company-directory.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
-import { CommitmentExtractorService } from "../src/mailbox/commitment-extractor.service";
-import { ObligationsService } from "../src/obligations/obligations.service";
 import { EnrichmentLogService } from "../src/crm/enrichment-log.service";
+import { CommitmentExtractorService } from "../src/mailbox/commitment-extractor.service";
 import { MailboxMatchService } from "../src/mailbox/mailbox-match.service";
 import {
 	type IncomingMessage,
 	ThreadWriterService,
 } from "../src/mailbox/thread-writer.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "thread-writer-spec";
 const domain = `threads-${suffix}.test`;
@@ -34,7 +34,13 @@ const match = new MailboxMatchService(db, directory, agent, log);
 // without a network call, so the writer's storage behaviour is what is under test.
 const commitments = new CommitmentExtractorService();
 const obligations = new ObligationsService(db);
-const threads = new ThreadWriterService(db, match, stamp, commitments, obligations);
+const threads = new ThreadWriterService(
+	db,
+	match,
+	stamp,
+	commitments,
+	obligations,
+);
 
 let row: MailboxSync;
 

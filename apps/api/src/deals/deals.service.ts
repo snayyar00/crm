@@ -582,7 +582,8 @@ export class DealsService {
 				}
 			} catch (err) {
 				this.logger.error({
-					message: "Could not spawn the SOW-draft task — the stage change stands",
+					message:
+						"Could not spawn the SOW-draft task — the stage change stands",
 					dealId: deal.id,
 					detail: err instanceof Error ? err.message : String(err),
 				});

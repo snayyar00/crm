@@ -41,12 +41,17 @@ const CALENDAR_MARKERS = [
 	"begin:vcalendar",
 ];
 
-export const looksLikeCalendarInvite = (subject: string, body: string): boolean => {
+export const looksLikeCalendarInvite = (
+	subject: string,
+	body: string,
+): boolean => {
 	const hay = `${subject} ${body.slice(0, 400)}`.toLowerCase();
 	return CALENDAR_MARKERS.some((m) => hay.includes(m));
 };
 
-const SYSTEM = (today: string) => `You extract COMMITMENTS from a business email for a CRM.
+const SYSTEM = (
+	today: string,
+) => `You extract COMMITMENTS from a business email for a CRM.
 Today is ${today}.
 A commitment is a concrete thing OWED by us (WebAbility) or OWED TO us, that has or implies a date.
 Return STRICT JSON only: {"commitments":[{"owner":"us|them","title":"<=70 chars imperative","dueDate":"YYYY-MM-DD","confidence":0-1,"evidence":"<=90 chars quoted verbatim"}]}
@@ -94,28 +99,35 @@ export class CommitmentExtractorService {
 				if (parsed) return this.filter(parsed, today);
 				this.logger.warn({ message: "Commitment JSON unparseable", attempt });
 			} catch (error) {
-				this.logger.warn({ message: "Commitment extraction failed", attempt, error });
+				this.logger.warn({
+					message: "Commitment extraction failed",
+					attempt,
+					error,
+				});
 			}
 		}
 		return [];
 	}
 
 	private async call(system: string, user: string): Promise<string> {
-		const res = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${this.apiKey}`,
-				"Content-Type": "application/json",
+		const res = await fetch(
+			"https://ai-gateway.vercel.sh/v1/chat/completions",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${this.apiKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					model: process.env.CRM_EXTRACTOR_MODEL ?? "anthropic/claude-sonnet-5",
+					max_tokens: 600,
+					messages: [
+						{ role: "system", content: system },
+						{ role: "user", content: user },
+					],
+				}),
 			},
-			body: JSON.stringify({
-				model: process.env.CRM_EXTRACTOR_MODEL ?? "anthropic/claude-sonnet-5",
-				max_tokens: 600,
-				messages: [
-					{ role: "system", content: system },
-					{ role: "user", content: user },
-				],
-			}),
-		});
+		);
 		if (!res.ok) throw new Error(`gateway ${res.status}`);
 		const json = (await res.json()) as {
 			choices?: { message?: { content?: string } }[];
@@ -140,7 +152,10 @@ export class CommitmentExtractorService {
 		}
 	}
 
-	private filter(items: ExtractedCommitment[], today: string): ExtractedCommitment[] {
+	private filter(
+		items: ExtractedCommitment[],
+		today: string,
+	): ExtractedCommitment[] {
 		return filterCommitments(items, today);
 	}
 }
@@ -152,7 +167,8 @@ export const filterCommitments = (
 ): ExtractedCommitment[] =>
 	items.filter((c) => {
 		if (!c || typeof c.title !== "string" || !c.title.trim()) return false;
-		if (typeof c.confidence !== "number" || c.confidence < MIN_CONFIDENCE) return false;
+		if (typeof c.confidence !== "number" || c.confidence < MIN_CONFIDENCE)
+			return false;
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(c.dueDate ?? "")) return false;
 		// A due date in the past is a misread, not a commitment we can act on.
 		if (c.dueDate < today) return false;

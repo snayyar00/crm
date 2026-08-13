@@ -9,9 +9,9 @@ import {
 } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { ActivityStampService } from "../crm/activity-stamp.service";
+import { InjectDatabase } from "../database/database.constants";
 import { ObligationsService } from "../obligations/obligations.service";
 import { CommitmentExtractorService } from "./commitment-extractor.service";
-import { InjectDatabase } from "../database/database.constants";
 import type { SyncSource } from "./mailbox.constants";
 import {
 	MailboxMatchService,
@@ -148,7 +148,7 @@ export class ThreadWriterService {
 				if (!repair) {
 					storedThreadId = record.id;
 
-				await tx.emailMessage.create({
+					await tx.emailMessage.create({
 						data: {
 							threadId: record.id,
 							rfcMessageId: parsed.rfcMessageId,
