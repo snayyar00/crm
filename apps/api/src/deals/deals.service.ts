@@ -538,6 +538,57 @@ export class DealsService {
 		// stage change is the user's action and must not roll back because a
 		// follow-up task could not be written. spawnForWonDeal is idempotent, so a
 		// missed spawn is recoverable by re-running it.
+		// A deal moved to CONTRACT_SENT needs a Statement of Work drafted. The
+		// document agent generates it (branded PDF + DocuSign DRAFT — it never
+		// emails anyone), but only a human sends it. This spawns the reminder
+		// TASK exactly once: skipped when any SOW task or DocuSign:SOW note
+		// already exists on the deal. Same shape as the won-deal block below —
+		// outside the transaction, swallowed on failure.
+		if (input.stage === "CONTRACT_SENT") {
+			try {
+				const existingSow = await this.db.activity.findFirst({
+					where: {
+						dealId: deal.id,
+						OR: [
+							{ type: ActivityType.TASK, subject: { contains: "SOW" } },
+							{ subject: { startsWith: "DocuSign:SOW" } },
+						],
+					},
+					select: { id: true },
+				});
+				if (!existingSow) {
+					const due = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+					await this.db.activity.create({
+						data: {
+							type: ActivityType.TASK,
+							subject: "Generate SOW draft",
+							body:
+								`Contract stage reached with no SOW on file. Generate the draft: ` +
+								`ask the CRM agent (or @abilyo) to "generate SOW for deal ${deal.id}". ` +
+								`The document agent produces the branded PDF and a DocuSign DRAFT; ` +
+								`sending remains a human action.`,
+							occurredAt: now,
+							dueAt: due,
+							companyId: deal.companyId,
+							dealId: deal.id,
+							createdById: actingUserId,
+							meta: { kind: "sow-draft", auto: true },
+						},
+					});
+					this.logger.log({
+						message: "Spawned SOW-draft task on CONTRACT_SENT",
+						dealId: deal.id,
+					});
+				}
+			} catch (err) {
+				this.logger.error({
+					message: "Could not spawn the SOW-draft task — the stage change stands",
+					dealId: deal.id,
+					detail: err instanceof Error ? err.message : String(err),
+				});
+			}
+		}
+
 		if (input.stage === "CLOSED_WON") {
 			try {
 				const spawned = await this.obligations.spawnForWonDeal(
