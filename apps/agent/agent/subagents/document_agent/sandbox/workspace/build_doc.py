@@ -102,10 +102,11 @@ def render(spec):
         if logo:
             parts.append(f'<img src="{logo}" alt="WebAbility logo">')
         parts.append('<span class="wordmark">WebAbility</span></div>')
-        parts.append(
-            '<div class="cover-tagline">Digital Accessibility · '
-            "Audit &amp; Conformance Practice</div>"
+        tagline = spec.get(
+            "tagline", "Digital Accessibility · Audit & Conformance Practice"
         )
+        if tagline:
+            parts.append(f'<div class="cover-tagline">{esc(tagline)}</div>')
         accent = (
             f'<br><span class="engagement">{esc(spec["title_accent"])}</span>'
             if spec.get("title_accent")

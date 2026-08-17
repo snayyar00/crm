@@ -261,6 +261,12 @@ def render(config):
         parts.append(f"<p>{esc(c['scope_intro'])}</p>")
     if c.get("scope_details"):
         parts.append(bullets(c["scope_details"]))
+    if c.get("scope_pages_table"):
+        t = c["scope_pages_table"]
+        if t.get("intro"):
+            parts.append(f"<p>{esc(t['intro'])}</p>")
+        rows = [[esc(cell) for cell in r] for r in t["rows"]]
+        parts.append(table(t["headers"], rows))
     if scope.get("pages"):
         pages = scope["pages"]
         pages = pages[0].lower() + pages[1:] if pages else pages
@@ -290,7 +296,8 @@ def render(config):
         "+ Safari on macOS and iOS); 200–400% zoom and reflow; text spacing; "
         "color and non-text contrast; pointer and dragging alternatives "
         "(WCAG 2.2 §2.5.7); target size (§2.5.8); and focus management</li>"
-        "</ul>"
+        + "".join(f"<li>{b}</li>" for b in c.get("methodology_extra_bullets", []))
+        + "</ul>"
     )
     parts.append(
         "<p>Every finding is documented with the failed WCAG 2.2 checkpoint, "
@@ -367,6 +374,32 @@ def render(config):
     ])
     parts.append(bullets(fee_bullets))
 
+    # 9.1 Future Phases (Tentative) — optional
+    fps = c.get("future_phases")
+    if fps:
+        parts.append('<h3 class="kicker">9.1 · Future Phases (Tentative)</h3>')
+        intro = c.get(
+            "future_phases_intro",
+            "The parties anticipate the phased roadmap below. Only Phase 1 "
+            "is authorized and payable under this Statement of Work. Future "
+            "phases are tentative and non-binding: each proceeds only upon a "
+            "written change order signed by both parties, at which point its "
+            "scope, timeline, and fee are confirmed. The fees shown for "
+            "future phases are good-faith estimates and create no obligation "
+            "on either party.",
+        )
+        parts.append(f"<p>{esc(intro)}</p>")
+        fp_rows = [
+            [
+                esc(p["phase"]),
+                esc(p["scope"]),
+                esc(p["fee"]),
+                esc(p.get("status", "Tentative — by written change order")),
+            ]
+            for p in fps
+        ]
+        parts.append(table(["Phase", "Scope", "Fee", "Status"], fp_rows))
+
     # 10 Assumptions & Limitations
     parts.append(section(10, "Assumptions & Limitations"))
     parts.append(bullets(c.get("assumptions", [
@@ -401,24 +434,25 @@ def render(config):
         f"WebAbility will promptly notify {esc(client_name)}, stop using it, "
         "and delete it unless otherwise agreed in writing.</p>"
     )
-    parts.append(
-        '<h3 class="kicker">11.2 · Handling &amp; Deletion of Client '
-        "Materials</h3>"
-    )
-    parts.append(
-        f"<p>{esc(client_name)} materials — including screenshots, test "
-        "links, credentials, reports-in-progress, and logs — are kept "
-        "confidential and are returned or securely deleted after completion "
-        f"of the engagement or earlier upon {esc(client_name)}'s request.</p>"
-    )
-    parts.append('<h3 class="kicker">11.3 · Tooling, CLI &amp; MCP Data Use</h3>')
-    parts.append(
-        "<p>WebAbility's CLI, MCP integration, scanning tools, support "
-        "channels, and related tooling will not transmit, store, or disclose "
-        f"{esc(client_name)}'s confidential information, source code, "
-        "credentials, screenshots, logs, or product data to any third party "
-        f"without {esc(client_name)}'s prior written approval.</p>"
-    )
+    if not c.get("confidentiality_slim"):
+        parts.append(
+            '<h3 class="kicker">11.2 · Handling &amp; Deletion of Client '
+            "Materials</h3>"
+        )
+        parts.append(
+            f"<p>{esc(client_name)} materials — including screenshots, test "
+            "links, credentials, reports-in-progress, and logs — are kept "
+            "confidential and are returned or securely deleted after completion "
+            f"of the engagement or earlier upon {esc(client_name)}'s request.</p>"
+        )
+        parts.append('<h3 class="kicker">11.3 · Tooling, CLI &amp; MCP Data Use</h3>')
+        parts.append(
+            "<p>WebAbility's CLI, MCP integration, scanning tools, support "
+            "channels, and related tooling will not transmit, store, or disclose "
+            f"{esc(client_name)}'s confidential information, source code, "
+            "credentials, screenshots, logs, or product data to any third party "
+            f"without {esc(client_name)}'s prior written approval.</p>"
+        )
 
     # 12 Term & Termination
     parts.append(section(12, "Term & Termination"))
