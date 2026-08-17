@@ -42,3 +42,6 @@ yarn-error.log*
 # eve build output
 .eve
 .output
+
+# Python bytecode from the document agent sandbox
+__pycache__/
