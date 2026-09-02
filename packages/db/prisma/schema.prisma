@@ -626,6 +626,7 @@ model AgentDefinition {
   actions       AgentAction[]
   auditEvents   AgentAuditEvent[]
   conversations AgentConversation[]
+  recordStates  AgentRecordState[]
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -798,6 +799,45 @@ model AgentRunEvent {
   @@unique([runId, sequence])
   @@index([runId, emittedAt])
   @@map("agentRunEvent")
+}
+
+/// Where a deployed agent stands with one record.
+///
+/// Before this, every scheduled run re-read the whole workspace to rediscover
+/// that Cipr was parked until October and USPTO still had no segment, and wrote
+/// the same housekeeping note again. A run now reads only records that are new
+/// to the agent, changed since it last looked, or have a follow-up due.
+enum AgentRecordStatus {
+  ACTIVE
+  PARKED
+  BLOCKED
+  DONE
+}
+
+model AgentRecordState {
+  id String @id @default(cuid())
+
+  agentId String
+  agent   AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  targetType String
+  targetId   String
+
+  status    AgentRecordStatus @default(ACTIVE)
+  reason    String?
+  nextDueAt DateTime?
+
+  lastReviewedAt DateTime?
+  lastRunId      String?
+  /// changedAt of the record as seen at the last review.
+  fingerprint    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, targetType, targetId])
+  @@index([agentId, nextDueAt])
+  @@map("agentRecordState")
 }
 
 model AgentAction {

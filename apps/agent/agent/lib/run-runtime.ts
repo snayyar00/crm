@@ -5,6 +5,13 @@ import { readCompanyHistory, readDealHistory } from "./accounts";
 import { readCrmHistory } from "./crm";
 import { failRun } from "./custom-agent-dispatch";
 import { searchCrm } from "./lookup";
+import {
+	listDueRecords,
+	markReviewed,
+	type RecordKind,
+	restampRunReviews,
+	setRecordState,
+} from "./record-state";
 import { lockAgentRun, runTerminalEventId } from "./run-state";
 
 const ACTION_LEASE_MS = 5 * 60_000;
@@ -129,6 +136,7 @@ export async function readRunRecord(
 	const run = await runContext(runId);
 	assertResourceAllowed(run.recordScope, run.allowedResources, input);
 	const sources = allowedHistorySources(run.allowedResources);
+	await markReviewed(run.agent.id, runId, input.kind, input.id);
 
 	if (input.kind === "contact")
 		return readCrmHistory(input.id, {
@@ -149,6 +157,48 @@ export async function readRunRecord(
 		includeEmail: sources.gmail,
 		includeCalendar: sources.calendar,
 	});
+}
+
+export async function listRunDueRecords(
+	runId: string,
+	input: { kinds?: RecordKind[]; limit?: number } = {},
+) {
+	const run = await runContext(runId);
+	return listDueRecords(
+		run.agent.id,
+		{ mode: run.recordScope, resources: run.allowedResources },
+		input,
+	);
+}
+
+export async function setRunRecordState(
+	runId: string,
+	input: {
+		kind: RecordKind;
+		id: string;
+		status: "ACTIVE" | "PARKED" | "BLOCKED" | "DONE";
+		reason?: string | null;
+		nextDueAt?: string | null;
+	},
+) {
+	const run = await runContext(runId);
+	assertResourceAllowed(run.recordScope, run.allowedResources, input);
+	const target = await targetRecord(input.kind, input.id);
+	if (!target) throw new Error("The requested CRM target no longer exists.");
+	const nextDueAt = input.nextDueAt ? new Date(input.nextDueAt) : null;
+	if (nextDueAt && Number.isNaN(nextDueAt.getTime())) {
+		throw new Error("nextDueAt is not a valid date.");
+	}
+	if (input.status === "ACTIVE" && !nextDueAt) {
+		throw new Error(
+			"An ACTIVE record needs nextDueAt, the date of its next step. Use PARKED, BLOCKED, or DONE when there is no next step.",
+		);
+	}
+	const state = await setRecordState(run.agent.id, runId, {
+		...input,
+		nextDueAt,
+	});
+	return { label: target.label, ...state };
 }
 
 export async function createRunActivity(
@@ -414,6 +464,7 @@ export async function stageRunResult(
 				result: (input.result ?? {}) as Prisma.InputJsonValue,
 			},
 		});
+		await restampRunReviews(run.agentId, runId, tx);
 
 		return { id: run.id, status: "RUNNING" as const };
 	});
