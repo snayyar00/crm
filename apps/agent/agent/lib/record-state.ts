@@ -95,7 +95,7 @@ export function dueBecause(
 	changedAt: Date,
 	now: Date,
 ): DueRecord["dueBecause"] | null {
-	if (!state || !state.lastReviewedAt) return "never reviewed";
+	if (!state?.lastReviewedAt) return "never reviewed";
 	if (changedAt > state.lastReviewedAt) return "changed since last review";
 	if (state.nextDueAt && state.nextDueAt <= now) return "follow-up due";
 	return null;
