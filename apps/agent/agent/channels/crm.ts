@@ -13,7 +13,7 @@ import {
 } from "../lib/custom-agent-dispatch";
 import { brief, drainAll, taskAuth } from "../lib/dispatch";
 import { settle } from "../lib/enrichment";
-import { finishRun } from "../lib/run-runtime";
+import { settleRunSession } from "../lib/run-runtime";
 import { completeTask, taskSubject } from "../lib/tasks";
 
 const TASK_MARKER = "task:";
@@ -167,17 +167,7 @@ export default defineChannel({
 			const runId = runIdFromToken(channel.continuationToken);
 			if (!runId) return;
 
-			const { db } = await import("@crm/db");
-			const run = await db.agentRun.findUnique({
-				where: { id: runId },
-				select: { status: true, summary: true, result: true },
-			});
-			if (run?.status === "RUNNING") {
-				await finishRun(runId, {
-					summary: run.summary ?? "The agent run completed.",
-					result: recordOf(run.result),
-				});
-			}
+			await settleRunSession(runId);
 		},
 
 		async "session.failed"(data, channel) {

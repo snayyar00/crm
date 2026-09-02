@@ -37,7 +37,10 @@ export default defineAgent({
 		result: z.record(z.string(), z.unknown()).nullable(),
 	}),
 	limits: {
-		maxInputTokensPerSession: 500_000,
+		// Cumulative provider-reported input across the whole run. A scan of
+		// ~25 records with trimmed histories lands well under this; the old
+		// 500_000 cap ended every scheduled run mid-scan.
+		maxInputTokensPerSession: 1_500_000,
 		maxOutputTokensPerSession: 40_000,
 		sessionTimeoutMs: 24 * 60 * 60 * 1000,
 	},

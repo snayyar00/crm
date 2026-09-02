@@ -3,6 +3,7 @@ import { ActivityType, db, type Prisma } from "@crm/db";
 import { lockIdempotencyKey } from "@crm/db/idempotency";
 import { readCompanyHistory, readDealHistory } from "./accounts";
 import { readCrmHistory } from "./crm";
+import { failRun } from "./custom-agent-dispatch";
 import { searchCrm } from "./lookup";
 import { lockAgentRun, runTerminalEventId } from "./run-state";
 
@@ -103,6 +104,21 @@ export async function queryRunCrm(
 	};
 }
 
+/**
+ * A deployed run reads dozens of records per session, and every read stays in
+ * the model context for the rest of the run. Ten threads of full email bodies
+ * per record pushed sessions past their input-token budget, so run reads are
+ * capped harder than interactive chat reads.
+ */
+const RUN_HISTORY_LIMITS = {
+	threads: 5,
+	messagesPerThread: 4,
+	bodyChars: 1500,
+} as const;
+
+/** A repeat of the same note or task on the same record inside this window is a no-op. */
+const DUPLICATE_ACTIVITY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 export async function readRunRecord(
 	runId: string,
 	input: {
@@ -116,20 +132,20 @@ export async function readRunRecord(
 
 	if (input.kind === "contact")
 		return readCrmHistory(input.id, {
-			threads: 10,
+			...RUN_HISTORY_LIMITS,
 			includeEmail: sources.gmail,
 			includeCalendar: sources.calendar,
 		});
 	if (input.kind === "company") {
 		return readCompanyHistory(input.id, {
-			threads: 10,
-			people: 50,
+			...RUN_HISTORY_LIMITS,
+			people: 25,
 			includeEmail: sources.gmail,
 			includeCalendar: sources.calendar,
 		});
 	}
 	return readDealHistory(input.id, {
-		threads: 10,
+		...RUN_HISTORY_LIMITS,
 		includeEmail: sources.gmail,
 		includeCalendar: sources.calendar,
 	});
@@ -201,6 +217,23 @@ export async function createRunActivity(
 	}
 	const target = await targetRecord(input.targetKind, input.targetId);
 	if (!target) throw new Error("The requested CRM target no longer exists.");
+
+	if (!existing) {
+		const duplicate = await findRecentDuplicateAction(
+			run.agentId,
+			input,
+			requestHash,
+		);
+		if (duplicate) {
+			return {
+				actionId: duplicate.id,
+				activityId: duplicate.externalId,
+				replayed: true,
+				duplicate: true as const,
+				message: `An identical ${input.type.toLowerCase()} already exists on ${target.label} from a run on ${duplicate.completedAt?.toISOString().slice(0, 10)}. Nothing was created.`,
+			};
+		}
+	}
 
 	let action = existing;
 	if (!action) {
@@ -446,6 +479,33 @@ export async function finishRun(
 	});
 }
 
+/**
+ * Called when the root session for a run ends. A run whose specialist never
+ * staged a result (finish_run was not called, for example because the session
+ * hit its token limit) is a failure, even though the parent relayed a message.
+ */
+export async function settleRunSession(runId: string) {
+	const run = await db.agentRun.findUnique({
+		where: { id: runId },
+		select: { status: true, summary: true, result: true },
+	});
+	if (run?.status !== "RUNNING") return run ? { status: run.status } : null;
+	if (run.result === null) {
+		return failRun(
+			runId,
+			"RUN_INCOMPLETE",
+			run.summary ?? "The run ended without a result.",
+		);
+	}
+	return finishRun(runId, {
+		summary: run.summary ?? "The agent run completed.",
+		result:
+			run.result && typeof run.result === "object" && !Array.isArray(run.result)
+				? (run.result as Record<string, unknown>)
+				: {},
+	});
+}
+
 async function assertRunSummaryAllowed(
 	tx: Prisma.TransactionClient,
 	versionId: string,
@@ -610,6 +670,41 @@ function recordOf(value: unknown): Record<string, unknown> {
 	return value && typeof value === "object" && !Array.isArray(value)
 		? (value as Record<string, unknown>)
 		: {};
+}
+
+/**
+ * Cross-run invariant: the same agent must not write the same note or task on
+ * the same record again and again. Per-call idempotency only covers retries
+ * inside one run, so a scheduled agent that re-scans the same contacts every
+ * hour used to leave dozens of identical notes behind.
+ */
+async function findRecentDuplicateAction(
+	agentId: string,
+	input: {
+		type: "NOTE" | "TASK";
+		targetKind: "company" | "contact" | "deal";
+		targetId: string;
+		subject?: string | null;
+	},
+	requestHash: string,
+) {
+	const subject = input.subject?.trim();
+	return db.agentAction.findFirst({
+		where: {
+			agentId,
+			type: "crm.activity.create",
+			status: "SUCCEEDED",
+			targetType: input.targetKind,
+			targetId: input.targetId,
+			metadata: { path: ["activityType"], equals: input.type },
+			completedAt: { gte: new Date(Date.now() - DUPLICATE_ACTIVITY_WINDOW_MS) },
+			...(subject
+				? { summary: { equals: subject, mode: "insensitive" } }
+				: { requestHash }),
+		},
+		orderBy: { completedAt: "desc" },
+		select: { id: true, externalId: true, completedAt: true },
+	});
 }
 
 function actionRequestHash(input: {
