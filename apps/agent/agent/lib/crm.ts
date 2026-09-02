@@ -156,11 +156,23 @@ export type CrmHistory = {
 	colleagues: { id: string; name: string; title: string | null }[];
 };
 
+export const DEFAULT_BODY_CHARS = 4000;
+
+/** Keep the head of an email body so one thread cannot flood a model context. */
+export function trimBody(
+	body: string | null | undefined,
+	max: number = DEFAULT_BODY_CHARS,
+): string | null {
+	if (!body) return null;
+	return body.length > max ? `${body.slice(0, max)}\n[… trimmed]` : body;
+}
+
 export async function readCrmHistory(
 	contactId: string,
 	options: {
 		threads?: number;
 		messagesPerThread?: number;
+		bodyChars?: number;
 		includeEmail?: boolean;
 		includeCalendar?: boolean;
 	} = {},
@@ -292,7 +304,7 @@ export async function readCrmHistory(
 				from: message.fromEmail,
 				fromName: message.fromName,
 				sentAt: message.sentAt.toISOString(),
-				body: message.body ?? message.snippet,
+				body: trimBody(message.body ?? message.snippet, options.bodyChars),
 			})),
 		})),
 		meetings: meetings.map((meeting) => ({

@@ -89,6 +89,7 @@ export async function readCompanyHistory(
 	options: {
 		threads?: number;
 		messagesPerThread?: number;
+		bodyChars?: number;
 		people?: number;
 		includeEmail?: boolean;
 		includeCalendar?: boolean;
@@ -268,7 +269,9 @@ export async function readCompanyHistory(
 			),
 		})),
 		deals: deals.map(toCompanyDeal),
-		threads: threads.map(toAccountThread),
+		threads: threads.map((thread) =>
+			toAccountThread(thread, options.bodyChars ?? BODY_LIMIT),
+		),
 		meetings: meetings.map((meeting) => toAccountMeeting(meeting, now)),
 		notes,
 		stats: {
@@ -334,6 +337,7 @@ export async function readDealHistory(
 	options: {
 		threads?: number;
 		messagesPerThread?: number;
+		bodyChars?: number;
 		includeEmail?: boolean;
 		includeCalendar?: boolean;
 	} = {},
@@ -494,7 +498,9 @@ export async function readDealHistory(
 				at: change.createdAt.toISOString(),
 			};
 		}),
-		threads: threads.map(toAccountThread),
+		threads: threads.map((thread) =>
+			toAccountThread(thread, options.bodyChars ?? BODY_LIMIT),
+		),
 		meetings: meetings.map((meeting) => toAccountMeeting(meeting, now)),
 		notes,
 		stats: {
@@ -563,20 +569,23 @@ async function recentNotes(
 	}));
 }
 
-function toAccountThread(thread: {
-	subject: string | null;
-	messageCount: number;
-	lastMessageAt: Date;
-	contact: { id: string; firstName: string; lastName: string | null } | null;
-	messages: {
-		direction: string;
-		fromEmail: string;
-		fromName: string | null;
-		sentAt: Date;
-		body: string | null;
-		snippet: string | null;
-	}[];
-}): AccountThread {
+function toAccountThread(
+	thread: {
+		subject: string | null;
+		messageCount: number;
+		lastMessageAt: Date;
+		contact: { id: string; firstName: string; lastName: string | null } | null;
+		messages: {
+			direction: string;
+			fromEmail: string;
+			fromName: string | null;
+			sentAt: Date;
+			body: string | null;
+			snippet: string | null;
+		}[];
+	},
+	bodyChars: number = BODY_LIMIT,
+): AccountThread {
 	return {
 		subject: thread.subject,
 		contact: thread.contact
@@ -589,7 +598,7 @@ function toAccountThread(thread: {
 			from: message.fromEmail,
 			fromName: message.fromName,
 			sentAt: message.sentAt.toISOString(),
-			body: (message.body ?? message.snippet)?.slice(0, BODY_LIMIT) ?? null,
+			body: (message.body ?? message.snippet)?.slice(0, bodyChars) ?? null,
 		})),
 	};
 }

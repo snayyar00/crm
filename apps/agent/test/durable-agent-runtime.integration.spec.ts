@@ -14,6 +14,7 @@ import {
 import {
 	createRunActivity,
 	finishRun,
+	settleRunSession,
 	stageRunResult,
 } from "../agent/lib/run-runtime";
 
@@ -555,6 +556,70 @@ describe("durable custom-agent runtime", () => {
 		expect(
 			await db.agentRun.findUniqueOrThrow({ where: { id: run.id } }),
 		).toMatchObject({ status: "SUCCEEDED", summary: "Staged safely" });
+	});
+
+	it("does not write the same note on the same record again in a later run", async () => {
+		const first = await createRun();
+		const input = {
+			type: "NOTE" as const,
+			targetKind: "company" as const,
+			targetId: companyId,
+			subject: "Needs segment",
+			body: "Segment is Unknown; set it before the drip.",
+		};
+		const created = await createRunActivity(first.id, "call-1", input);
+		expect(created.replayed).toBe(false);
+		await finishRun(first.id, { summary: "first" });
+
+		const second = await createRun();
+		const repeat = await createRunActivity(second.id, "call-1", {
+			...input,
+			subject: "needs segment ",
+			body: "Different wording, same note.",
+		});
+		expect(repeat).toMatchObject({
+			replayed: true,
+			duplicate: true,
+			activityId: created.activityId,
+		});
+		expect(await db.agentAction.count({ where: { runId: second.id } })).toBe(0);
+		expect(
+			await db.activity.count({
+				where: {
+					companyId,
+					subject: { equals: "Needs segment", mode: "insensitive" },
+				},
+			}),
+		).toBe(1);
+
+		const other = await createRunActivity(second.id, "call-2", {
+			...input,
+			subject: "Book the demo",
+		});
+		expect(other.replayed).toBe(false);
+	});
+
+	it("marks a run FAILED when the session ends without finish_run", async () => {
+		const run = await createRun();
+		await db.agentRun.update({
+			where: { id: run.id },
+			data: { summary: "SUBAGENT_EXECUTION_FAILED: token limit" },
+		});
+		await settleRunSession(run.id);
+		expect(
+			await db.agentRun.findUniqueOrThrow({ where: { id: run.id } }),
+		).toMatchObject({
+			status: "FAILED",
+			errorCode: "RUN_INCOMPLETE",
+			errorMessage: "SUBAGENT_EXECUTION_FAILED: token limit",
+		});
+
+		const finished = await createRun();
+		await stageRunResult(finished.id, { summary: "done", result: { n: 1 } });
+		await settleRunSession(finished.id);
+		expect(
+			await db.agentRun.findUniqueOrThrow({ where: { id: finished.id } }),
+		).toMatchObject({ status: "SUCCEEDED", summary: "done" });
 	});
 
 	it("claims an approved CRM action once and rejects scope before target access", async () => {
