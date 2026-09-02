@@ -41,7 +41,9 @@ export default defineAgent({
 		// ~25 records with trimmed histories lands well under this; the old
 		// 500_000 cap ended every scheduled run mid-scan.
 		maxInputTokensPerSession: 1_500_000,
-		maxOutputTokensPerSession: 40_000,
+		// Reasoning tokens count as output. 40_000 ended ~30% of Lead outreach
+		// runs mid-scan on deepseek-v4-flash (2026-09-02).
+		maxOutputTokensPerSession: 150_000,
 		sessionTimeoutMs: 24 * 60 * 60 * 1000,
 	},
 });
