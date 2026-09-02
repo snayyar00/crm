@@ -198,7 +198,16 @@ export async function setRunRecordState(
 		...input,
 		nextDueAt,
 	});
-	return { label: target.label, ...state };
+	// Tool results must be plain JSON; Prisma hands back Date objects.
+	return {
+		label: target.label,
+		kind: state.targetType,
+		id: state.targetId,
+		status: state.status,
+		reason: state.reason,
+		nextDueAt: state.nextDueAt?.toISOString() ?? null,
+		lastReviewedAt: state.lastReviewedAt?.toISOString() ?? null,
+	};
 }
 
 export async function createRunActivity(
