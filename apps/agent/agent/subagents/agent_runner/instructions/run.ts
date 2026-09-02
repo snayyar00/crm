@@ -42,7 +42,7 @@ export function renderDue(due: {
 	});
 	const more =
 		due.dueTotal > due.due.length
-			? `\n\n${due.dueTotal - due.due.length} more are due; call \`list_due_records\` again after these.`
+			? `\n\n${due.dueTotal - due.due.length} more are due; they will come in the next run. Do not list or read them now.`
 			: "";
 	return `As of ${due.now}, ${due.dueTotal} of ${due.inScope} approved records need attention; ${due.skipped} were reviewed already and are unchanged. Work only on these:\n\n${lines.join("\n")}${more}`;
 }
