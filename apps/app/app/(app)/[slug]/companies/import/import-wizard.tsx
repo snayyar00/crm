@@ -33,6 +33,17 @@ import { type ParsedCsv, parseCsv } from "./csv-parse";
 
 type Step = "upload" | "map" | "result";
 
+type ImportRow = {
+	name: string;
+	phone?: string;
+	city?: string;
+	stateCode?: string;
+	industry?: string;
+	subIndustry?: string;
+	website?: string;
+	description?: string;
+};
+
 type CrmField =
 	| "name"
 	| "phone"
@@ -111,7 +122,7 @@ export function ImportWizard() {
 		const reader = new FileReader();
 		reader.onload = (e) => {
 			const text = e.target?.result;
-			if (typeof text !== "string") return;
+			if (text == null || text instanceof ArrayBuffer) return;
 			const result = parseCsv(text);
 			if (result.headers.length === 0) {
 				toast.error("The CSV file has no headers.");
@@ -154,22 +165,12 @@ export function ImportWizard() {
 			return;
 		}
 		const rows = parsed.rows.map((row) => {
-			const obj: Record<string, string> = {};
-			for (const [header, field] of Object.entries(mapping)) {
-				if (field === "_skip") continue;
+			const entries = Object.entries(mapping).flatMap(([header, field]) => {
+				if (field === "_skip") return [];
 				const idx = parsed.headers.indexOf(header);
-				obj[field] = row[idx] ?? "";
-			}
-			return obj as {
-				name: string;
-				phone?: string;
-				city?: string;
-				stateCode?: string;
-				industry?: string;
-				subIndustry?: string;
-				website?: string;
-				description?: string;
-			};
+				return [[field, row[idx] ?? ""]] as Array<[string, string]>;
+			});
+			return Object.fromEntries(entries) as ImportRow;
 		});
 		importMutation.mutate({ rows });
 	}, [parsed, mapping, importMutation]);

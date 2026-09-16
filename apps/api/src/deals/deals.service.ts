@@ -553,15 +553,16 @@ export class DealsService {
 			}
 
 			const now = new Date();
+			const updateData: Prisma.DealUpdateInput = {
+				stage: input.stage,
+				stageChangedAt: now,
+				closedAt: closed ? now : null,
+				closedReason: closed ? (closedReason ?? null) : null,
+			};
+			if (engagementType) updateData.engagementType = engagementType;
 			const updated = await tx.deal.update({
 				where: { id: input.id },
-				data: {
-					stage: input.stage,
-					...(engagementType ? { engagementType } : {}),
-					stageChangedAt: now,
-					closedAt: closed ? now : null,
-					closedReason: closed ? (closedReason ?? null) : null,
-				},
+				data: updateData,
 				select: { id: true, stage: true },
 			});
 			await tx.activity.create({
@@ -632,7 +633,9 @@ export class DealsService {
 						data: { engagementType: input.engagementType },
 					});
 				}
-				let spawned: unknown = null;
+				let spawned: Awaited<
+					ReturnType<ObligationsService["spawnForWonDeal"]>
+				> | null = null;
 				try {
 					spawned = await this.obligations.spawnForWonDeal(
 						settled.id,

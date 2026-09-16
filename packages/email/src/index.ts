@@ -40,6 +40,18 @@ export type SendEmailInput = {
 
 export type SendEmailResult = { messageId: string };
 
+type BrevoSendPayload = {
+	sender: { email: string; name?: string };
+	to: Array<{ email: string }>;
+	cc?: Array<{ email: string }>;
+	subject: string;
+	textContent: string;
+	htmlContent: string;
+	replyTo?: { email: string };
+	attachment?: EmailAttachment[];
+	tags?: string[];
+};
+
 function escapeHtml(s: string): string {
 	return s
 		.replace(/&/g, "&amp;")
@@ -65,17 +77,17 @@ export async function sendEmail(
 		name: process.env.EMAIL_FROM_NAME ?? "WebAbility",
 	};
 
-	const body = {
+	const body: BrevoSendPayload = {
 		sender: from,
 		to: input.to.map((email) => ({ email })),
-		...(input.cc?.length ? { cc: input.cc.map((email) => ({ email })) } : {}),
 		subject: input.subject,
 		textContent: input.text,
 		htmlContent: `<div style="font:14px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">${escapeHtml(input.text).replace(/\n/g, "<br>")}</div>`,
-		...(input.replyTo ? { replyTo: { email: input.replyTo } } : {}),
-		...(input.attachments?.length ? { attachment: input.attachments } : {}),
-		...(input.tag ? { tags: [input.tag] } : {}),
 	};
+	if (input.cc?.length) body.cc = input.cc.map((email) => ({ email }));
+	if (input.replyTo) body.replyTo = { email: input.replyTo };
+	if (input.attachments?.length) body.attachment = input.attachments;
+	if (input.tag) body.tags = [input.tag];
 
 	const res = await fetch(API, {
 		method: "POST",

@@ -1,4 +1,4 @@
-import type { Db } from "@crm/db";
+import type { Db, Prisma } from "@crm/db";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
@@ -89,7 +89,7 @@ const RECHECK_MONTHS = 6;
  * rescuing one means a conversation, a fix and a signature; an audit report you
  * can write in a few days.
  */
-export const LEAD_DAYS: Record<ObligationKind, number> = {
+export const LEAD_DAYS = {
 	TRIAL_EXPIRY: 14,
 	RECHECK_DUE: 14,
 	VPAT_EXPIRY: 21,
@@ -99,7 +99,7 @@ export const LEAD_DAYS: Record<ObligationKind, number> = {
 	// the whole failure this models happened in the window before anyone thought
 	// to write the task down.
 	COMMITMENT: 2,
-};
+} satisfies Record<ObligationKind, number>;
 /** An unknown kind gets the TIGHTEST window — a new kind should under-alarm
  *  until someone gives it a considered lead time, not spam. */
 export const DEFAULT_LEAD_DAYS = 3;
@@ -227,12 +227,16 @@ export class ObligationsService {
 			const attachDeal = input.dealId && !existing.dealId;
 			const dateMoved = existing.dueAt?.getTime() !== input.dueAt.getTime();
 			if (attachDeal || dateMoved) {
+				const data: Prisma.ActivityUpdateInput = {};
+				if (attachDeal && input.dealId)
+					data.deal = { connect: { id: input.dealId } };
+				if (dateMoved) {
+					data.dueAt = input.dueAt;
+					data.body = input.body;
+				}
 				const updated = await this.db.activity.update({
 					where: { id: existing.id },
-					data: {
-						...(attachDeal ? { dealId: input.dealId } : {}),
-						...(dateMoved ? { dueAt: input.dueAt, body: input.body } : {}),
-					},
+					data,
 				});
 				return { row: updated, created: false, updated: true };
 			}
@@ -459,7 +463,7 @@ export class ObligationsService {
 	 * second click on an already-completed task must not re-date the successor.
 	 */
 	async handleCompletionChange(
-		tx: Db,
+		tx: Prisma.TransactionClient,
 		activityId: string,
 		wasCompleted: boolean,
 		nowCompleted: boolean,
@@ -485,7 +489,7 @@ export class ObligationsService {
 	 * late would spawn a successor that is born overdue.
 	 */
 	private async spawnSuccessor(
-		tx: Db,
+		tx: Prisma.TransactionClient,
 		row: {
 			id: string;
 			subject: string | null;
@@ -535,7 +539,10 @@ export class ObligationsService {
 	 * created, or the partial unique index rejects the re-open with a raw P2002.
 	 * Deleting inside the same transaction is what keeps that from surfacing.
 	 */
-	private async unspawnSuccessor(tx: Db, row: { id: string }) {
+	private async unspawnSuccessor(
+		tx: Prisma.TransactionClient,
+		row: { id: string },
+	) {
 		const successor = await tx.activity.findFirst({
 			where: { type: "TASK", meta: { path: ["spawnedFrom"], equals: row.id } },
 		});

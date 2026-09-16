@@ -65,9 +65,7 @@ function subscriptionDeliverables(): Deliverable[] {
 	];
 }
 
-function parseNoteHints(
-	notes: { subject: string | null; body: string | null }[],
-): {
+type NoteHints = {
 	deliverables?: string[];
 	discount?: { percent: number; deadline: string };
 	scopePages?: string;
@@ -76,12 +74,16 @@ function parseNoteHints(
 	remediationMonths?: number;
 	feeNote?: string;
 	specialTerms?: string;
-} {
+};
+
+function parseNoteHints(
+	notes: { subject: string | null; body: string | null }[],
+): NoteHints {
 	const full = notes
 		.map((n) => `${n.subject ?? ""} ${n.body ?? ""}`)
 		.join("\n");
 
-	const hints: Record<string, unknown> = {};
+	const hints: NoteHints = {};
 
 	const dlMatch = full.match(/deliverables?\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (dlMatch?.[1]) {
@@ -121,7 +123,7 @@ function parseNoteHints(
 	const termsMatch = full.match(/special\s+terms?\s*[:-]\s*(.+?)(?:\n|$)/i);
 	if (termsMatch?.[1]) hints.specialTerms = termsMatch[1].trim();
 
-	return hints as ReturnType<typeof parseNoteHints>;
+	return hints;
 }
 
 function generateSowRef(): string {
@@ -371,23 +373,24 @@ export default defineTool({
 				}. No additional charges without prior written agreement.`,
 				...(hints.specialTerms ? [hints.specialTerms] : []),
 			],
-			...(remMonths
-				? {
-						assumptions: [
-							`Conformance outcomes depend on ${clientName} implementing the recommended remediation; the ACR reflects the state of the product as validated at issuance.`,
-							`The remediation window runs up to ${remMonths} months from audit-report delivery. If remediation is not completed within it, WebAbility issues the VPAT/ACR based on the product's state at window close; further validation afterwards is handled by written change order.`,
-							"WCAG conformance assessment involves expert judgment; WebAbility warrants a diligent, methodology-driven evaluation, not immunity from third-party claims.",
-							"Material scope additions (new pages, flows, or products) are handled by written change order.",
-						],
-					}
-				: {}),
 		};
+		// The key stays ABSENT without remMonths: build_sow.py prints its own
+		// default list when "assumptions" is missing, and nothing for [].
+		const finalConfig: typeof config & { assumptions?: string[] } = config;
+		if (remMonths) {
+			finalConfig.assumptions = [
+				`Conformance outcomes depend on ${clientName} implementing the recommended remediation; the ACR reflects the state of the product as validated at issuance.`,
+				`The remediation window runs up to ${remMonths} months from audit-report delivery. If remediation is not completed within it, WebAbility issues the VPAT/ACR based on the product's state at window close; further validation afterwards is handled by written change order.`,
+				"WCAG conformance assessment involves expert judgment; WebAbility warrants a diligent, methodology-driven evaluation, not immunity from third-party claims.",
+				"Material scope additions (new pages, flows, or products) are handled by written change order.",
+			];
+		}
 
 		const sandbox = await ctx.getSandbox();
 		const configPath = sandbox.resolvePath("sow_config.json");
 		await sandbox.writeTextFile({
 			path: configPath,
-			content: JSON.stringify(config, null, 2),
+			content: JSON.stringify(finalConfig, null, 2),
 		});
 
 		const outputPdf = sandbox.resolvePath(`${sowRef}.pdf`);

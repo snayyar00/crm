@@ -36,12 +36,12 @@ const HEALTH_VARIANT = {
 	unknown: "outline",
 } as const satisfies Record<Health, string>;
 
-const HEALTH_LABEL: Record<Health, string> = {
+const HEALTH_LABEL = {
 	ok: "Healthy",
 	late: "Late",
 	error: "Error",
 	unknown: "No signal",
-};
+} as const satisfies Record<Health, string>;
 
 function HealthBadge({ health }: { health: Health }) {
 	return <Badge variant={HEALTH_VARIANT[health]}>{HEALTH_LABEL[health]}</Badge>;
@@ -49,7 +49,7 @@ function HealthBadge({ health }: { health: Health }) {
 
 function when(d: Date | string | null): string {
 	if (!d) return "never";
-	const t = typeof d === "string" ? new Date(d) : d;
+	const t = d instanceof Date ? d : new Date(d);
 	const min = Math.round((Date.now() - t.getTime()) / 60_000);
 	if (min < 1) return "just now";
 	if (min < 60) return `${min} min ago`;

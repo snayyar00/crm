@@ -1,4 +1,4 @@
-import type { Db } from "@crm/db";
+import type { Db, DealStage, EngagementType, Prisma } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import {
@@ -35,13 +35,13 @@ type DueRow = {
 	id: string;
 	subject: string | null;
 	dueAt: Date | null;
-	meta: unknown;
+	meta: Prisma.JsonValue;
 	deal: {
 		name: string;
-		amount: unknown;
-		stage: string;
-		engagementType?: string | null;
-		workStartedAt?: Date | null;
+		amount: Prisma.Decimal | null;
+		stage: DealStage;
+		engagementType: EngagementType | null;
+		workStartedAt: Date | null;
 	} | null;
 	company: { name: string } | null;
 };
@@ -125,7 +125,7 @@ export class ObligationDigestService {
 		// single narrow horizon would drop a trial that is 12 days out before the
 		// per-kind rule ever saw it.
 		const horizon = new Date(Date.now() + MAX_LEAD_DAYS * 86_400_000);
-		const rows = (await this.db.activity.findMany({
+		const rows: DueRow[] = await this.db.activity.findMany({
 			where: { type: "TASK", completedAt: null, dueAt: { lte: horizon } },
 			orderBy: { dueAt: "asc" },
 			include: {
@@ -140,7 +140,7 @@ export class ObligationDigestService {
 				},
 				company: { select: { name: true } },
 			},
-		})) as unknown as DueRow[];
+		});
 
 		const obligations = rows.filter(
 			(r) =>

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { z } from "zod";
 
 /**
  * Reads a stored email and extracts COMMITMENTS - a concrete thing owed by us or
@@ -15,13 +16,15 @@ import { Injectable, Logger } from "@nestjs/common";
  * ("please let us know if there is any update" scored 0.3).
  */
 
-export interface ExtractedCommitment {
-	owner: "us" | "them";
-	title: string;
-	dueDate: string;
-	confidence: number;
-	evidence: string;
-}
+const extractedCommitment = z.object({
+	owner: z.enum(["us", "them"]),
+	title: z.string(),
+	dueDate: z.string(),
+	confidence: z.number(),
+	evidence: z.string(),
+});
+
+export type ExtractedCommitment = z.infer<typeof extractedCommitment>;
 
 /** Below this, a candidate is noise rather than a commitment. Tuned on real mail. */
 export const MIN_CONFIDENCE = 0.7;
@@ -144,9 +147,11 @@ export class CommitmentExtractorService {
 			const obj = JSON.parse(raw.slice(start, end + 1)) as {
 				commitments?: unknown;
 			};
-			return Array.isArray(obj.commitments)
-				? (obj.commitments as ExtractedCommitment[])
-				: [];
+			if (!Array.isArray(obj.commitments)) return [];
+			const parsed = obj.commitments.map((item) =>
+				extractedCommitment.safeParse(item),
+			);
+			return parsed.flatMap((result) => (result.success ? [result.data] : []));
 		} catch {
 			return null;
 		}
@@ -166,9 +171,8 @@ export const filterCommitments = (
 	today: string,
 ): ExtractedCommitment[] =>
 	items.filter((c) => {
-		if (!c || typeof c.title !== "string" || !c.title.trim()) return false;
-		if (typeof c.confidence !== "number" || c.confidence < MIN_CONFIDENCE)
-			return false;
+		if (!c.title.trim()) return false;
+		if (c.confidence < MIN_CONFIDENCE) return false;
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(c.dueDate ?? "")) return false;
 		// A due date in the past is a misread, not a commitment we can act on.
 		if (c.dueDate < today) return false;

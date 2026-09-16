@@ -131,7 +131,7 @@ export function CalendarList() {
 	if (isPending)
 		return <p className="text-muted-foreground text-sm">Loading…</p>;
 
-	const rows = (data ?? []) as unknown as Row[];
+	const rows: Row[] = data ?? [];
 	if (rows.length === 0) {
 		return (
 			<p className="text-muted-foreground text-sm">

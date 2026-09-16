@@ -17,6 +17,7 @@ import {
 import { convertToBase } from "@crm/db/fx";
 import { lockIdempotencyKey } from "@crm/db/idempotency";
 import { readReportingCurrency } from "@crm/db/settings";
+import { z } from "zod";
 import { currentFocus } from "./focus";
 
 const WITH_OPTIONS = { options: { orderBy: { position: "asc" } } } as const;
@@ -86,10 +87,12 @@ const NATIVE_DEAL_KEYS = new Set<string>(
 	NATIVE_DEAL_FIELDS.map((field) => field.key),
 );
 
+const nativeDealValue = z.union([z.string(), z.number(), z.null()]);
+
 async function writeNativeDealField(
 	recordId: string,
 	key: string,
-	value: unknown,
+	value: string | number | null,
 ): Promise<WriteResult> {
 	const deal = await db.deal.findUnique({
 		where: { id: recordId },
@@ -109,16 +112,20 @@ async function writeNativeDealField(
 			return { written: true, key, value };
 		}
 
-		if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		const day = z
+			.string()
+			.regex(/^\d{4}-\d{2}-\d{2}$/)
+			.safeParse(value);
+		if (!day.success) {
 			return {
 				written: false,
 				reason: "expected_close_date takes YYYY-MM-DD, or null to clear it.",
 			};
 		}
 
-		const date = new Date(`${value}T00:00:00.000Z`);
+		const date = new Date(`${day.data}T00:00:00.000Z`);
 		if (Number.isNaN(date.getTime())) {
-			return { written: false, reason: `"${value}" is not a real date.` };
+			return { written: false, reason: `"${day.data}" is not a real date.` };
 		}
 
 		await db.deal.update({
@@ -134,30 +141,33 @@ async function writeNativeDealField(
 	if (key === "amount") {
 		if (value === null) {
 			amount = null;
-		} else if (
-			typeof value === "number" &&
-			Number.isFinite(value) &&
-			value >= 0 &&
-			value <= MAX_DEAL_AMOUNT
-		) {
-			amount = new Prisma.Decimal(value.toFixed(2));
 		} else {
-			return {
-				written: false,
-				reason:
-					"amount takes a number of currency units, 0 or more, or null to clear it.",
-			};
+			const units = z
+				.number()
+				.finite()
+				.min(0)
+				.max(MAX_DEAL_AMOUNT)
+				.safeParse(value);
+			if (!units.success) {
+				return {
+					written: false,
+					reason:
+						"amount takes a number of currency units, 0 or more, or null to clear it.",
+				};
+			}
+			amount = new Prisma.Decimal(units.data.toFixed(2));
 		}
 	}
 
 	if (key === "currency") {
-		if (typeof value !== "string" || !isCurrencyCode(value)) {
+		const code = z.string().safeParse(value);
+		if (!code.success || !isCurrencyCode(code.data)) {
 			return {
 				written: false,
 				reason: `"${String(value)}" is not a supported currency code. Use one of the codes in Settings → Currencies, e.g. USD or EUR.`,
 			};
 		}
-		currency = normalizeCurrency(value);
+		currency = normalizeCurrency(code.data);
 	}
 
 	const converted = await convertToBase(
@@ -193,7 +203,14 @@ export async function writeField(input: {
 
 	if (!definition) {
 		if (input.entity === "DEAL" && NATIVE_DEAL_KEYS.has(input.key)) {
-			return writeNativeDealField(input.recordId, input.key, input.value);
+			const value = nativeDealValue.safeParse(input.value);
+			if (!value.success) {
+				return {
+					written: false,
+					reason: `${input.key} takes a text value, a number, or null.`,
+				};
+			}
+			return writeNativeDealField(input.recordId, input.key, value.data);
 		}
 
 		return {

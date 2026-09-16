@@ -167,8 +167,8 @@ describe("agent record state", () => {
 			nextDueAt: new Date(Date.now() + 86_400_000).toISOString(),
 		});
 		expect(parked).toMatchObject({ label: "Stacey State", status: "PARKED" });
-		expect(typeof parked.nextDueAt).toBe("string");
-		expect(typeof parked.lastReviewedAt).toBe("string");
+		expect(parked.nextDueAt).toEqual(expect.any(String));
+		expect(parked.lastReviewedAt).toEqual(expect.any(String));
 		expect(JSON.parse(JSON.stringify(parked))).toEqual(parked);
 		expect((await dueIds(run.id)).has(key)).toBe(false);
 

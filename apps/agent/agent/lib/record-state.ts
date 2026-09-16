@@ -30,11 +30,11 @@ type Candidate = {
 
 const ALL_KINDS: RecordKind[] = ["contact", "company", "deal"];
 const DEFAULT_LIMIT = 25;
-const DUE_ORDER: Record<DueRecord["dueBecause"], number> = {
+const DUE_ORDER = {
 	"follow-up due": 0,
 	"changed since last review": 1,
 	"never reviewed": 2,
-};
+} satisfies Record<DueRecord["dueBecause"], number>;
 
 /**
  * When the record last moved in a way the agent should see: an edit, an

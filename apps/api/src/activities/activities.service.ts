@@ -264,7 +264,7 @@ export class ActivitiesService {
 			//   successor can only be created AFTER the update.
 			if (!completed) {
 				await this.obligations.handleCompletionChange(
-					tx as unknown as Db,
+					tx,
 					id,
 					wasCompleted,
 					false,
@@ -277,7 +277,7 @@ export class ActivitiesService {
 			});
 			if (completed) {
 				await this.obligations.handleCompletionChange(
-					tx as unknown as Db,
+					tx,
 					id,
 					wasCompleted,
 					true,

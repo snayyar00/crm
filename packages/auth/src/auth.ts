@@ -51,9 +51,9 @@ if (env.google) {
 		// recorded the grant — signs in with an access token that dies in an hour
 		// and can never be renewed, so its mailbox silently stops syncing.
 		prompt: "consent",
-
-		...(googleHostedDomain() ? { hd: googleHostedDomain() } : {}),
 	};
+	const hostedDomain = googleHostedDomain();
+	if (hostedDomain) google.hd = hostedDomain;
 
 	socialProviders.google = google;
 }
