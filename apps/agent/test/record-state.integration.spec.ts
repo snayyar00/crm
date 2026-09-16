@@ -90,7 +90,11 @@ beforeAll(async () => {
 						summary: "Create a CRM note",
 						activityTypes: ["NOTE"],
 					},
-					{ type: "run.summary", provider: "crm", summary: "Summarize the run" },
+					{
+						type: "run.summary",
+						provider: "crm",
+						summary: "Summarize the run",
+					},
 				],
 			},
 			modelId: "test/model",

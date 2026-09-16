@@ -2,12 +2,17 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
 import { ActivitiesService } from "../src/activities/activities.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "task-edit-spec";
 const userId = `user-${suffix}`;
 const domain = `taskedit-${suffix}.test`;
 
-const activities = new ActivitiesService(db, new ActivityStampService(db));
+const activities = new ActivitiesService(
+	db,
+	new ActivityStampService(db),
+	new ObligationsService(db),
+);
 
 let companyId: string;
 

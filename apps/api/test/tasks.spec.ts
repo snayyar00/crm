@@ -4,13 +4,18 @@ import { z } from "zod";
 import { taskListInput } from "../src/activities/activities.contracts";
 import { ActivitiesService } from "../src/activities/activities.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
+import { ObligationsService } from "../src/obligations/obligations.service";
 
 const suffix = process.env.TEST_RUN_ID ?? "tasks-spec";
 const domain = `tasks-${suffix}.test`;
 const userId = `user-${suffix}`;
 const mateId = `mate-${suffix}`;
 
-const activities = new ActivitiesService(db, new ActivityStampService(db));
+const activities = new ActivitiesService(
+	db,
+	new ActivityStampService(db),
+	new ObligationsService(db),
+);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TODAY = "2026-08-12";
