@@ -8,16 +8,37 @@ export const TASK_KINDS = [
 	"company-profile",
 	"workspace-profile",
 	"field-backfill",
+	"slack-people-match",
+	"slack-channel-join",
+	"agent-event",
 ] as const;
 
 export type TaskKind = (typeof TASK_KINDS)[number];
 
-export const DIRECT_KINDS = ["brand", "portrait"] as const;
+export const DIRECT_KINDS = [
+	"brand",
+	"portrait",
+	"slack-people-match",
+	"slack-channel-join",
+	"agent-event",
+] as const;
 
 export type DirectKind = (typeof DIRECT_KINDS)[number];
 
 export function isDirectKind(kind: string): kind is DirectKind {
 	return (DIRECT_KINDS as readonly string[]).includes(kind);
+}
+
+export const CONTACT_STATUS_KINDS = ["identify", "profile", "recheck"] as const;
+
+export const COMPANY_STATUS_KINDS = ["brand"] as const;
+
+export function ownsContactStatus(kind: string): boolean {
+	return (CONTACT_STATUS_KINDS as readonly string[]).includes(kind);
+}
+
+export function ownsCompanyStatus(kind: string): boolean {
+	return (COMPANY_STATUS_KINDS as readonly string[]).includes(kind);
 }
 
 export const MAX_ATTEMPTS = 3;
@@ -35,4 +56,7 @@ export const PRIORITY = {
 	companyProfile: 40,
 	fieldBackfill: 20,
 	recheck: 0,
+	slackPeople: 150,
+	slackJoin: 950,
+	event: 700,
 } as const;

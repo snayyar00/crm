@@ -1,6 +1,8 @@
-import { extract } from "./context-dev";
-import { getProfile, slugFromProfileUrl } from "./linkdapi";
+import { z } from "zod";
+import { CONTEXT } from "./context-config";
+import { extract, type JsonSchema } from "./context-dev";
 import { namesMatch } from "./names";
+import { personByProfileUrl, slugFromProfileUrl } from "./people";
 
 export type PortraitSource = "linkedin" | "github" | "employer-site";
 
@@ -21,27 +23,34 @@ export type PortraitSubject = {
 export async function findPortrait(
 	subject: PortraitSubject,
 	spend: (units?: number) => { ok: boolean; reason?: string },
+	contextReady = true,
 ): Promise<
 	| { found: true; candidate: PortraitCandidate }
 	| { found: false; tried: string[]; reason?: string }
 > {
 	const tried: string[] = [];
 
-	if (subject.linkedinUrl) {
+	if (subject.linkedinUrl && !contextReady) {
+		tried.push("Context.dev is not connected, so LinkedIn was not read");
+	}
+
+	if (subject.linkedinUrl && contextReady) {
 		const slug = slugFromProfileUrl(subject.linkedinUrl);
 		if (slug) {
-			const charge = spend();
+			const charge = spend(CONTEXT.people.enrichCost);
 			if (!charge.ok) return { found: false, tried, reason: charge.reason };
 
-			const result = await getProfile(slug);
-			if (result.ok && result.data.photoUrl) {
+			const result = await personByProfileUrl(
+				`https://www.linkedin.com/in/${slug}`,
+			);
+			if (result.outcome === "found" && result.person.photoUrl) {
 				return {
 					found: true,
-					candidate: { source: "linkedin", url: result.data.photoUrl },
+					candidate: { source: "linkedin", url: result.person.photoUrl },
 				};
 			}
 			tried.push(
-				result.ok
+				result.outcome === "found"
 					? "LinkedIn profile has no picture"
 					: "LinkedIn profile could not be read",
 			);
@@ -59,7 +68,13 @@ export async function findPortrait(
 		};
 	}
 
-	if (subject.companyDomain && subject.name) {
+	if (subject.companyDomain && subject.name && !contextReady) {
+		tried.push(
+			"Context.dev is not connected, so the company site was not read",
+		);
+	}
+
+	if (subject.companyDomain && subject.name && contextReady) {
 		const charge = spend(2);
 		if (!charge.ok) return { found: false, tried, reason: charge.reason };
 
@@ -71,7 +86,7 @@ export async function findPortrait(
 	return { found: false, tried };
 }
 
-const TEAM_SCHEMA = {
+const TEAM_SCHEMA: JsonSchema = {
 	type: "object",
 	properties: {
 		people: {
@@ -93,6 +108,21 @@ const TEAM_SCHEMA = {
 	required: ["people"],
 };
 
+const teamPage = z
+	.object({
+		people: z
+			.array(
+				z
+					.object({
+						name: z.string().nullable().catch(null),
+						photoUrl: z.string().nullable().catch(null),
+					})
+					.catch({ name: null, photoUrl: null }),
+			)
+			.catch([]),
+	})
+	.catch({ people: [] });
+
 async function fromEmployerSite(
 	subject: PortraitSubject,
 ): Promise<PortraitCandidate | null> {
@@ -106,20 +136,13 @@ async function fromEmployerSite(
 
 	if (result.outcome !== "found") return null;
 
-	const people = (result.data as { people?: unknown } | null)?.people;
-	if (!Array.isArray(people)) return null;
-
-	for (const entry of people) {
-		if (!entry || typeof entry !== "object") continue;
-		const row = entry as Record<string, unknown>;
-
-		const name = typeof row.name === "string" ? row.name : null;
-		const photo = typeof row.photoUrl === "string" ? row.photoUrl : null;
-		if (!name || !photo) continue;
+	for (const person of teamPage.parse(result.data).people) {
+		const { name, photoUrl } = person;
+		if (!name || !photoUrl) continue;
 		if (!namesMatch(name, subject.name)) continue;
 
 		try {
-			const parsed = new URL(photo);
+			const parsed = new URL(photoUrl);
 			if (parsed.protocol !== "https:" && parsed.protocol !== "http:") continue;
 			return { source: "employer-site", url: parsed.toString() };
 		} catch {}

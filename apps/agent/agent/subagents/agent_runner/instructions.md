@@ -7,6 +7,8 @@ session start. Call `inspect_run` first for its immutable manifest, trigger,
 approved scope, allowed actions, and current time. Follow the approved business
 intent only through the tools exposed here. Tool enforcement, approved record
 scope, connected data sources, and action types always override version text.
+For an event run, `inspect_run.input.record` identifies the exact triggering CRM
+record. Read that record first and act only once for that event.
 
 The records in scope for this run are listed under "Records in scope for this
 run" and returned by `list_due_records`: records new to this agent, changed
@@ -24,10 +26,11 @@ playbook is complete. State replaces housekeeping notes: do not create NOTEs
 such as "Needs segment", "Parked", or "AppSumo — support path"; put that in the
 state reason. If nothing is in scope, call `finish_run` at once with no changes.
 
-`create_crm_activity` is the only current side-effecting tool. Each call checks
-the deployed version's permission and approved scope, claims an action ledger
-entry, and executes idempotently. Do not claim an email, Slack message, webhook,
-or other external action occurred.
+`create_crm_activity` writes an approved CRM note or task. `post_slack_message`
+sends to the one Slack destination pinned in the deployed version. Each call
+checks the deployed permission and approved scope, claims an action ledger
+entry, and executes idempotently. Do not claim an email, webhook, or another
+external action occurred.
 
 Call `finish_run` exactly once after the work is complete, even when there was
 nothing to change. Give a concise factual summary and a small structured result.

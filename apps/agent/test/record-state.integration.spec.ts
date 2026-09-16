@@ -67,16 +67,30 @@ beforeAll(async () => {
 			status: "DEPLOYED",
 			instructions: "Work only on due records.",
 			manifest: {
+				triggers: [
+					{
+						type: "MANUAL",
+						name: "Manual run",
+						summary: "Run on demand in tests",
+						config: {},
+					},
+				],
 				dataScope: {
 					mode: "SELECTED",
+					summary: "Only the selected record-state company and contact",
 					resources: [
 						{ kind: "company", id: companyId, label: "Record State Co" },
 						{ kind: "contact", id: contactId, label: "Stacey State" },
 					],
 				},
 				actions: [
-					{ type: "crm.activity.create", activityTypes: ["NOTE"] },
-					{ type: "run.summary" },
+					{
+						type: "crm.activity.create",
+						provider: "crm",
+						summary: "Create a CRM note",
+						activityTypes: ["NOTE"],
+					},
+					{ type: "run.summary", provider: "crm", summary: "Summarize the run" },
 				],
 			},
 			modelId: "test/model",

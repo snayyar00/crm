@@ -9,6 +9,7 @@ import {
 } from "@crm/db";
 import { RETIRED_OUTCOME } from "@crm/db/agent-tasks";
 import { readAgentModel } from "@crm/db/settings";
+import { CONTACT_CAP_REASON } from "@crm/db/tracking";
 import { WORKSPACE_ID } from "@crm/db/workspace";
 import {
 	bucket,
@@ -147,7 +148,6 @@ export class RollupService {
 			postgres_version: postgres,
 			members_bucket: bucket(members),
 
-			cap_rapidapi: isSet("RAPIDAPI_KEY"),
 			cap_perplexity: isSet("PERPLEXITY_API_KEY"),
 			cap_context_dev: Boolean(contextKey?.contextDevApiKey?.trim()),
 			cap_blob: isSet("BLOB_READ_WRITE_TOKEN"),
@@ -495,6 +495,30 @@ export class RollupService {
 			}),
 		]);
 
+		const [
+			trackingSite,
+			trackingDomains,
+			trackingViews,
+			trackingForms,
+			trackingContacts,
+			trackingCapped,
+			trackingPaused,
+		] = await Promise.all([
+			this.db.appSetting.count({ where: { trackingSiteId: { not: null } } }),
+			this.db.trackedDomain.count(),
+			this.db.trackedEvent.count({
+				where: { type: "page_view", occurredAt: { gte: since } },
+			}),
+			this.db.formSubmission.count({ where: { createdAt: { gte: since } } }),
+			this.db.contact.count({
+				where: { createdAt: { gte: since }, source: RecordSource.TRACKING },
+			}),
+			this.db.formSubmission.count({
+				where: { createdAt: { gte: since }, skipReason: CONTACT_CAP_REASON },
+			}),
+			this.db.appSetting.count({ where: { trackingPaused: true } }),
+		]);
+
 		const configured = syncs.reduce((sum, row) => sum + row._count._all, 0);
 
 		return {
@@ -528,6 +552,14 @@ export class RollupService {
 				Object.values(ActivityType),
 			),
 
+			cap_tracking: trackingSite > 0,
+			tracking_domains: bucket(trackingDomains),
+			tracking_page_views: trackingViews,
+			tracking_forms: trackingForms,
+			tracking_contacts_created: trackingContacts,
+			tracking_capped: trackingCapped,
+			tracking_paused: trackingPaused > 0,
+
 			mailbox_sync_configured: configured > 0,
 			mailbox_sync_status: merge(
 				syncs.map((row) => ({ key: row.status, count: row._count._all })),
@@ -554,14 +586,16 @@ function isSet(name: string): boolean {
 	return Boolean(process.env[name]?.trim());
 }
 
-function byKind(rows: Counted[]): Record<string, number> {
+type CountsByKey = Record<string, number>;
+
+function byKind(rows: Counted[]): CountsByKey {
 	return merge(
 		rows.map((row) => ({ ...row, key: permittedTaskKind(row.key) })),
 	);
 }
 
-function merge(rows: Counted[]): Record<string, number> {
-	const counts: Record<string, number> = {};
+function merge(rows: Counted[]): CountsByKey {
+	const counts: CountsByKey = {};
 
 	for (const row of rows) {
 		counts[row.key] = (counts[row.key] ?? 0) + row.count;
@@ -570,12 +604,9 @@ function merge(rows: Counted[]): Record<string, number> {
 	return counts;
 }
 
-function countsOf(
-	rows: Counted[],
-	keys: readonly string[],
-): Record<string, number> {
+function countsOf(rows: Counted[], keys: readonly string[]): CountsByKey {
 	const merged = merge(rows);
-	const complete: Record<string, number> = {};
+	const complete: CountsByKey = {};
 
 	for (const key of keys) complete[key] = merged[key] ?? 0;
 

@@ -14,13 +14,13 @@ import { cn } from "@crm/ui/lib/utils";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useQueryState } from "nuqs";
 import { DetailSheetEmpty, SECTION_TITLE } from "@/components/detail-sheet";
+import { SEARCH_PARAM } from "@/lib/search-param-keys";
 import { useTRPC } from "@/lib/trpc/client";
 import { useHydrated } from "@/lib/use-hydrated";
 import { ActivityComposer } from "./activity-composer";
 import { TimelineEntry, type TimelineEntryData } from "./timeline-entry";
 import {
 	historyFilter,
-	TIMELINE_PARAM,
 	TIMELINE_TABS,
 	type TimelineTab,
 	timelineTabParser,
@@ -31,19 +31,16 @@ export type TimelineAnchor =
 	| { contactId: string }
 	| { dealId: string };
 
-const TAB_LABELS: Record<TimelineTab, string> = {
+const TAB_LABELS = {
 	all: "All",
 	notes: "Notes",
 	email: "Email",
 	meetings: "Meetings",
 	upcoming: "Upcoming",
 	done: "Done",
-};
+} satisfies Record<TimelineTab, string>;
 
-const EMPTY_STATES: Record<
-	TimelineTab,
-	{ title: string; description: string }
-> = {
+const EMPTY_STATES = {
 	all: {
 		title: "Nothing has happened yet",
 		description:
@@ -73,16 +70,16 @@ const EMPTY_STATES: Record<
 		title: "Nothing finished yet",
 		description: "Tasks move here once you tick them off.",
 	},
-};
+} satisfies Record<TimelineTab, { title: string; description: string }>;
 
-const EMPTY_ICONS: Record<TimelineTab, CarbonIcon> = {
+const EMPTY_ICONS = {
 	all: Time,
 	notes: Chat,
 	email: Email,
 	meetings: Events,
 	upcoming: Task,
 	done: Checkmark,
-};
+} satisfies Record<TimelineTab, CarbonIcon>;
 
 const dayFormat = new Intl.DateTimeFormat("en-US", {
 	weekday: "short",
@@ -161,7 +158,10 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 	const trpc = useTRPC();
 	const hydrated = useHydrated();
 
-	const [tab, setTab] = useQueryState(TIMELINE_PARAM, timelineTabParser);
+	const [tab, setTab] = useQueryState(
+		SEARCH_PARAM.record.timeline,
+		timelineTabParser,
+	);
 
 	const counts = useQuery(trpc.activities.timelineCounts.queryOptions(anchor));
 

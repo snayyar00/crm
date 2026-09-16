@@ -18,10 +18,13 @@
 		"clean": "rm -rf .turbo node_modules"
 	},
 	"dependencies": {
+		"@better-auth/api-key": "1.6.25",
 		"@better-auth/sso": "1.6.25",
 		"@crm/db": "workspace:*",
 		"@crm/env": "workspace:*",
-		"better-auth": "^1.6.25"
+		"@crm/validation": "workspace:*",
+		"better-auth": "^1.6.25",
+		"zod": "^4.4.3"
 	},
 	"peerDependencies": {
 		"react": "^19.2.0"

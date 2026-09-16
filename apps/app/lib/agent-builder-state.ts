@@ -1,3 +1,9 @@
+import {
+	type EveStreamEvent,
+	eveRequestedActions,
+	eveSettledAction,
+} from "@crm/validation/eve-stream";
+
 export type BuilderArtifactState = {
 	id: string;
 	versionId: string | null;
@@ -49,6 +55,57 @@ export function builderConversationIsWorking(
 			["PENDING", "SENDING"].includes(submission.status),
 		) || Boolean(conversation.sessionId && !conversation.continuationToken)
 	);
+}
+
+export function builderSessionStreamKey(
+	sessionId: string | null,
+	submissionId: string | null,
+): string | null {
+	return sessionId ? `${sessionId}:${submissionId ?? "initial"}` : null;
+}
+
+export function agentBuilderCallIsActive(
+	events: readonly EveStreamEvent[],
+): boolean {
+	const activeCallIds = new Set<string>();
+
+	for (const event of events) {
+		if (event.type === "actions.requested") {
+			for (const action of eveRequestedActions.parse(event.data).actions) {
+				if (
+					action.kind === "subagent-call" &&
+					(action.name === "agent_builder" ||
+						action.subagentName === "agent_builder") &&
+					action.callId !== null
+				) {
+					activeCallIds.add(action.callId);
+				}
+			}
+		}
+
+		if (event.type === "action.result" || event.type === "subagent.completed") {
+			const settled = eveSettledAction.parse(event.data);
+			const callId = [
+				settled.callId,
+				settled.result.callId,
+				settled.action.callId,
+			].find((value) => value !== null);
+			if (callId) activeCallIds.delete(callId);
+		}
+
+		if (
+			[
+				"turn.failed",
+				"turn.cancelled",
+				"session.failed",
+				"session.completed",
+			].includes(event.type)
+		) {
+			activeCallIds.clear();
+		}
+	}
+
+	return activeCallIds.size > 0;
 }
 
 export function reviewVersionId(

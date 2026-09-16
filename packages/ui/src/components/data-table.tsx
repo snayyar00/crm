@@ -10,13 +10,25 @@ import Filter from "@carbon/icons-react/es/Filter";
 import { Button } from "@crm/ui/components/button";
 import { Checkbox } from "@crm/ui/components/checkbox";
 import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "@crm/ui/components/command";
+import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
+	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@crm/ui/components/dropdown-menu";
 import { Spinner } from "@crm/ui/components/spinner";
@@ -62,6 +74,11 @@ export type DataTableFacet = {
 	id: string;
 	label: string;
 	options: { value: string; label: string }[];
+	searchable?: boolean;
+	search?: string;
+	onSearchChange?: (search: string) => void;
+	stale?: boolean;
+	empty?: ReactNode;
 };
 
 export type DataTableTabs = {
@@ -146,6 +163,106 @@ function SortIndicator({
 	);
 }
 
+function facetLabel(facet: DataTableFacet, selected: string[]): string {
+	if (selected.length === 0) return facet.label;
+	if (selected.length === 1) {
+		const option = facet.options.find((o) => o.value === selected[0]);
+		return option?.label ?? facet.label;
+	}
+	return `${facet.label} (${selected.length})`;
+}
+
+function toggle(selected: string[], value: string, checked: boolean): string[] {
+	return checked ? [...selected, value] : selected.filter((v) => v !== value);
+}
+
+function FacetSubmenu({
+	facet,
+	selected,
+	onChange,
+}: {
+	facet: DataTableFacet;
+	selected: string[];
+	onChange: (values: string[]) => void;
+}) {
+	return (
+		<DropdownMenuSub>
+			<DropdownMenuSubTrigger>
+				<span className="flex-1">{facet.label}</span>
+				{selected.length > 0 && (
+					<span className="tabular-nums opacity-60">({selected.length})</span>
+				)}
+			</DropdownMenuSubTrigger>
+			<DropdownMenuSubContent className="max-h-72 min-w-52 overflow-hidden">
+				{facet.searchable ? (
+					<Command
+						shouldFilter={facet.onSearchChange === undefined}
+						className="max-h-72"
+					>
+						<CommandInput
+							placeholder={`Search ${facet.label.toLowerCase()}…`}
+							value={facet.search}
+							onValueChange={facet.onSearchChange}
+							onKeyDown={(event) => event.stopPropagation()}
+						/>
+						<CommandList>
+							<CommandEmpty>{facet.empty ?? "Nothing matches."}</CommandEmpty>
+							<CommandGroup>
+								{facet.options.map((option) => {
+									const checked = selected.includes(option.value);
+									return (
+										<CommandItem
+											key={option.value}
+											value={option.label}
+											disabled={facet.stale}
+											data-checked={checked}
+											onSelect={() =>
+												onChange(toggle(selected, option.value, !checked))
+											}
+										>
+											<Checkbox
+												checked={checked}
+												className="pointer-events-none"
+											/>
+											<span className="truncate">{option.label}</span>
+										</CommandItem>
+									);
+								})}
+							</CommandGroup>
+						</CommandList>
+					</Command>
+				) : (
+					<div className="max-h-72 overflow-y-auto">
+						{selected.length > 0 && (
+							<>
+								<DropdownMenuItem onSelect={() => onChange([])}>
+									Clear
+								</DropdownMenuItem>
+								<DropdownMenuSeparator />
+							</>
+						)}
+						{facet.options.map((option) => {
+							const checked = selected.includes(option.value);
+							return (
+								<DropdownMenuCheckboxItem
+									key={option.value}
+									checked={checked}
+									onSelect={(event) => event.preventDefault()}
+									onCheckedChange={(next) =>
+										onChange(toggle(selected, option.value, next))
+									}
+								>
+									{option.label}
+								</DropdownMenuCheckboxItem>
+							);
+						})}
+					</div>
+				)}
+			</DropdownMenuSubContent>
+		</DropdownMenuSub>
+	);
+}
+
 export function DataTable<TRow, TSub = unknown>({
 	query,
 	columns,
@@ -208,18 +325,30 @@ export function DataTable<TRow, TSub = unknown>({
 	const pageSize = query.pageSize;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+	const availableFacets = useMemo(
+		() =>
+			(facets ?? []).filter(
+				(facet) =>
+					facet.options.length > 0 ||
+					facet.searchable ||
+					(query.filters[facet.id]?.length ?? 0) > 0,
+			),
+		[facets, query.filters],
+	);
+
 	const hasFilterControls =
 		tabs != null ||
-		(facets?.length ?? 0) > 0 ||
+		availableFacets.length > 0 ||
 		sortableColumns.length > 0 ||
 		anyExpandable ||
 		hideable.length > 0 ||
 		actions != null ||
 		leadingActions != null;
+	const activeFacetFilterCount = availableFacets.filter(
+		(facet) => (query.filters[facet.id]?.length ?? 0) > 0,
+	).length;
 	const activeFilterCount =
-		(tabs && query.tab !== "all" ? 1 : 0) +
-		(facets?.filter((facet) => (query.filters[facet.id] ?? "all") !== "all")
-			.length ?? 0);
+		(tabs && query.tab !== "all" ? 1 : 0) + activeFacetFilterCount;
 
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col gap-3", className)}>
@@ -327,47 +456,35 @@ export function DataTable<TRow, TSub = unknown>({
 					{leadingActions}
 
 					<div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center lg:ml-auto">
-						{facets?.map((facet) => {
-							const selected = query.filters[facet.id] ?? "all";
-							const active = facet.options.find((o) => o.value === selected);
-							return (
-								<DropdownMenu key={facet.id}>
-									<DropdownMenuTrigger asChild>
-										<Button
-											variant="outline"
-											size="sm"
-											className="justify-between"
-										>
-											<span className="truncate">
-												{active ? active.label : facet.label}
+						{availableFacets.length > 0 && (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="outline"
+										size="sm"
+										className="justify-start sm:justify-center"
+									>
+										<Filter data-icon="inline-start" />
+										Filters
+										{activeFacetFilterCount > 0 && (
+											<span className="tabular-nums opacity-60">
+												({activeFacetFilterCount})
 											</span>
-											<ChevronDown
-												data-icon="inline-end"
-												className="opacity-60"
-											/>
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="start" className="min-w-44">
-										<DropdownMenuRadioGroup
-											value={selected}
-											onValueChange={(value) => query.setFilter(facet.id, value)}
-										>
-											<DropdownMenuRadioItem value="all">
-												{facet.label}
-											</DropdownMenuRadioItem>
-											{facet.options.map((option) => (
-												<DropdownMenuRadioItem
-													key={option.value}
-													value={option.value}
-												>
-													{option.label}
-												</DropdownMenuRadioItem>
-											))}
-										</DropdownMenuRadioGroup>
-									</DropdownMenuContent>
-								</DropdownMenu>
-							);
-						})}
+										)}
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start" className="min-w-48">
+									{availableFacets.map((facet) => (
+										<FacetSubmenu
+											key={facet.id}
+											facet={facet}
+											selected={query.filters[facet.id] ?? []}
+											onChange={(values) => query.setFilter(facet.id, values)}
+										/>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
 						{(sortableColumns.length > 0 || anyExpandable) && (
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>

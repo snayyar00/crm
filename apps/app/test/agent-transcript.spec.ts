@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync } from "node:fs";
+import type { EveToolInput, EveToolOutput } from "@crm/validation/eve-tool";
 import type { EveMessage } from "eve/react";
 import {
 	conversationTimeline,
@@ -31,10 +32,15 @@ const message = (
 		metadata: turnId ? { turnId } : undefined,
 	}) as unknown as EveMessage;
 
-const tool = (
-	toolName: string,
-	extra: Record<string, unknown> = {},
-): Record<string, unknown> => ({
+type ToolPartFixture = {
+	errorText?: string;
+	input?: EveToolInput;
+	output?: EveToolOutput;
+	state?: string;
+	toolCallId?: string;
+};
+
+const tool = (toolName: string, extra: ToolPartFixture = {}) => ({
 	type: "dynamic-tool",
 	toolName,
 	state: "output-available",
@@ -163,6 +169,32 @@ describe("toTranscript", () => {
 });
 
 describe("deal list presentation", () => {
+	const deal = {
+		id: "deal-1",
+		name: "Notion — expansion",
+		stage: "CONTRACT_SENT",
+		amount: 14_000,
+		currency: "USD",
+		company: {
+			id: "company-1",
+			name: "Notion",
+			domain: "notion.so",
+			iconUrl: "https://cdn.example.test/notion.png",
+			iconDarkUrl: null,
+			iconTone: "opaque",
+			logoUrl: "https://cdn.example.test/notion.svg",
+		},
+		owner: {
+			id: "user-1",
+			name: "Priya Raman",
+			email: "priya@example.com",
+			image: "https://cdn.example.test/priya.png",
+		},
+		daysSinceLastActivity: 201,
+		neverActive: true,
+		expectedCloseDate: "2026-09-03T19:50:06.111Z",
+	};
+
 	const output = {
 		asOf: "2026-08-06T01:14:05.025Z",
 		criteria: {
@@ -171,33 +203,7 @@ describe("deal list presentation", () => {
 			companyId: null,
 			ownerId: null,
 		},
-		deals: [
-			{
-				id: "deal-1",
-				name: "Notion — expansion",
-				stage: "CONTRACT_SENT",
-				amount: 14_000,
-				currency: "USD",
-				company: {
-					id: "company-1",
-					name: "Notion",
-					domain: "notion.so",
-					iconUrl: "https://cdn.example.test/notion.png",
-					iconDarkUrl: null,
-					iconTone: "opaque",
-					logoUrl: "https://cdn.example.test/notion.svg",
-				},
-				owner: {
-					id: "user-1",
-					name: "Priya Raman",
-					email: "priya@example.com",
-					image: "https://cdn.example.test/priya.png",
-				},
-				daysSinceLastActivity: 201,
-				neverActive: true,
-				expectedCloseDate: "2026-09-03T19:50:06.111Z",
-			},
-		],
+		deals: [deal],
 		hasMore: false,
 	};
 
@@ -223,10 +229,7 @@ describe("deal list presentation", () => {
 		const second = dealListResultOf({
 			...output,
 			asOf: "2026-08-06T01:15:00.000Z",
-			deals: [
-				output.deals[0],
-				{ ...output.deals[0], id: "deal-2", name: "Linear — Comp AI" },
-			],
+			deals: [deal, { ...deal, id: "deal-2", name: "Linear — Comp AI" }],
 		});
 		if (!first || !second) throw new Error("Expected valid deal list results");
 
@@ -658,5 +661,63 @@ describe("every tool has a line of English", () => {
 			expect(verb, tool).not.toContain("_");
 			expect(verb[0], tool).toBe(verb[0]?.toUpperCase() ?? "");
 		}
+	});
+});
+
+describe("tool call details", () => {
+	it("keeps the tool input so the label can describe the work", () => {
+		const [row] = toTranscript([
+			message([
+				tool("write_agent_file", {
+					input: { path: "agent/manifest.json" },
+					output: {},
+				}),
+			]),
+		]);
+
+		expect(row?.items[0]).toMatchObject({
+			kind: "did",
+			input: { path: "agent/manifest.json" },
+		});
+	});
+
+	it("surfaces the failure text instead of dropping it", () => {
+		const [row] = toTranscript([
+			message([
+				tool("write_agent_file", {
+					state: "output-error",
+					errorText: "Draft is closed.",
+				}),
+			]),
+		]);
+
+		expect(row?.items[0]).toMatchObject({
+			kind: "did",
+			errorText: "Draft is closed.",
+		});
+	});
+
+	it("leaves errorText null when the call succeeded", () => {
+		const [row] = toTranscript([
+			message([tool("write_agent_file", { output: {} })]),
+		]);
+
+		expect(row?.items[0]).toMatchObject({ kind: "did", errorText: null });
+	});
+
+	it("keeps text, tools and text in the order they happened", () => {
+		const [row] = toTranscript([
+			message([
+				{ type: "text", text: "Looking." },
+				tool("write_agent_file", { input: { path: "a" }, output: {} }),
+				{ type: "text", text: "Done." },
+			]),
+		]);
+
+		expect(row?.items.map((item) => item.kind)).toEqual([
+			"said",
+			"did",
+			"said",
+		]);
 	});
 });

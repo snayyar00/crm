@@ -11,6 +11,7 @@ import {
 	ThreadWriterService,
 } from "../src/mailbox/thread-writer.service";
 import { ObligationsService } from "../src/obligations/obligations.service";
+import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "thread-writer-spec";
 const domain = `threads-${suffix}.test`;
@@ -21,13 +22,14 @@ const rootId = `<root-${suffix}@mail.test>`;
 const movedRoot = `outlook-conversation:${suffix}`;
 
 const agent = {
-	contactCreated: async () => undefined,
+	contactCreated: async () => true,
 	companyCreated: async () => undefined,
-	companyRequested: async () => undefined,
+	withCrmEvents: withDiscardedCrmEvents,
+	companyRequested: async () => true,
 } as unknown as AgentTriggerService;
 
 const stamp = new ActivityStampService(db);
-const directory = new CompanyDirectoryService(db, agent);
+const directory = new CompanyDirectoryService(agent);
 const log = new EnrichmentLogService(db, stamp);
 const match = new MailboxMatchService(db, directory, agent, log);
 // Extraction is inert in this test: no AI_GATEWAY_API_KEY means extract() returns []

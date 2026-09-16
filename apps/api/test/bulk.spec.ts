@@ -11,6 +11,7 @@ import { ConversionService } from "../src/currency/conversion.service";
 import { DealsService } from "../src/deals/deals.service";
 import { FieldsService } from "../src/fields/fields.service";
 import { ObligationsService } from "../src/obligations/obligations.service";
+import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "bulk-spec";
 const domain = `bulk-${suffix}.test`;
@@ -19,15 +20,16 @@ const secondOwnerId = `second-owner-${suffix}`;
 const ours = { OR: [{ email: { endsWith: `@${domain}` } }] };
 
 const agent = {
-	contactCreated: async () => undefined,
+	contactCreated: async () => true,
 	companyCreated: async () => undefined,
-	companyRequested: async () => undefined,
+	companyRequested: async () => true,
+	withCrmEvents: withDiscardedCrmEvents,
 } as unknown as AgentTriggerService;
 
 const stamp = new ActivityStampService(db);
 const queue = new AgentQueueService(db);
 const conversion = new ConversionService(db);
-const directory = new CompanyDirectoryService(db, agent);
+const directory = new CompanyDirectoryService(agent);
 
 const fields = new FieldsService(db, agent);
 const contacts = new ContactsService(
@@ -49,6 +51,7 @@ const companies = new CompaniesService(
 );
 const deals = new DealsService(
 	db,
+	agent,
 	stamp,
 	conversion,
 	fields,
@@ -110,7 +113,13 @@ describe("assigning an owner to a selection", () => {
 				ids: [first.id, second.id],
 				ownerId: secondOwnerId,
 			}),
-		).toEqual({ requested: 2, succeeded: 2, failed: 0, message: null });
+		).toEqual({
+			requested: 2,
+			succeeded: 2,
+			skipped: 0,
+			failed: 0,
+			message: null,
+		});
 
 		expect(
 			await db.contact.count({
@@ -130,7 +139,13 @@ describe("assigning an owner to a selection", () => {
 				ids: [only.id, only.id],
 				ownerId,
 			}),
-		).toEqual({ requested: 1, succeeded: 1, failed: 0, message: null });
+		).toEqual({
+			requested: 1,
+			succeeded: 1,
+			skipped: 0,
+			failed: 0,
+			message: null,
+		});
 	});
 
 	it("refuses an owner who does not work here", async () => {
@@ -139,12 +154,16 @@ describe("assigning an owner to a selection", () => {
 			email: `alan@${domain}`,
 		});
 
-		await expect(
-			contacts.bulkAssignOwner({
+		let refused: Error | null = null;
+		try {
+			await contacts.bulkAssignOwner({
 				ids: [contact.id],
 				ownerId: `nobody-${suffix}`,
-			}),
-		).rejects.toThrow(/does not work here/);
+			});
+		} catch (cause) {
+			refused = cause as Error;
+		}
+		expect(refused?.message).toMatch(/does not work here/);
 
 		expect(
 			await db.contact.findUnique({
@@ -155,7 +174,7 @@ describe("assigning an owner to a selection", () => {
 	});
 });
 
-describe("deleting a selection", () => {
+describe("purging a selection", () => {
 	it("suppresses every address, exactly as deleting them one by one would", async () => {
 		const first = await contacts.create({
 			firstName: "Gone",
@@ -166,9 +185,10 @@ describe("deleting a selection", () => {
 			email: `also-gone@${domain}`,
 		});
 
-		expect(await contacts.bulkDelete([first.id, second.id])).toEqual({
+		expect(await contacts.bulkPurge([first.id, second.id])).toEqual({
 			requested: 2,
 			succeeded: 2,
+			skipped: 0,
 			failed: 0,
 			message: null,
 		});
@@ -186,10 +206,7 @@ describe("deleting a selection", () => {
 			email: `doomed@${domain}`,
 		});
 
-		const result = await contacts.bulkDelete([
-			survivor.id,
-			`missing-${suffix}`,
-		]);
+		const result = await contacts.bulkPurge([survivor.id, `missing-${suffix}`]);
 
 		expect(result.succeeded).toBe(1);
 		expect(result.failed).toBe(1);
@@ -210,9 +227,10 @@ describe("deleting a selection", () => {
 			ownerId,
 		});
 
-		expect(await companies.bulkDelete([doomed.id])).toEqual({
+		expect(await companies.bulkPurge([doomed.id])).toEqual({
 			requested: 1,
 			succeeded: 1,
+			skipped: 0,
 			failed: 0,
 			message: null,
 		});
@@ -229,9 +247,16 @@ describe("moving a selection of deals to a stage", () => {
 			ownerId,
 		});
 
-		await expect(
-			deals.bulkSetStage({ ids: [deal.id], stage: "CLOSED_LOST" }, ownerId),
-		).rejects.toThrow(/teaches nobody anything/);
+		let refused: Error | null = null;
+		try {
+			await deals.bulkSetStage(
+				{ ids: [deal.id], stage: "CLOSED_LOST" },
+				ownerId,
+			);
+		} catch (cause) {
+			refused = cause as Error;
+		}
+		expect(refused?.message).toMatch(/teaches nobody anything/);
 
 		expect(
 			await db.deal.findUnique({
@@ -262,7 +287,13 @@ describe("moving a selection of deals to a stage", () => {
 				},
 				ownerId,
 			),
-		).toEqual({ requested: 2, succeeded: 2, failed: 0, message: null });
+		).toEqual({
+			requested: 2,
+			succeeded: 2,
+			skipped: 0,
+			failed: 0,
+			message: null,
+		});
 
 		const closed = await db.deal.findMany({
 			where: { id: { in: [first.id, second.id] } },

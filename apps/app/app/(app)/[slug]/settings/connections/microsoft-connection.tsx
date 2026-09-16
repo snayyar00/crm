@@ -42,10 +42,12 @@ import { useTRPC } from "@/lib/trpc/client";
 
 const AUTO_CREATE = "Add the company and contact when you reply to someone new";
 
-const CONNECT_ERRORS: Record<string, string> = {
-	"email_doesn't_match":
+const CONNECT_ERRORS = new Map([
+	[
+		"email_doesn't_match",
 		"That Microsoft account has a different email address to the one you sign in with, so it cannot be attached to your account. Connect the Microsoft account that matches your sign-in address.",
-};
+	],
+]);
 
 function MicrosoftUnavailable() {
 	return (
@@ -66,7 +68,13 @@ function MicrosoftUnavailable() {
 	);
 }
 
-function ConnectMicrosoft({ connectError }: { connectError?: string }) {
+function ConnectMicrosoft({
+	slug,
+	connectError,
+}: {
+	slug: string;
+	connectError?: string;
+}) {
 	const [pending, setPending] = useState(false);
 
 	function fail(message?: string) {
@@ -82,8 +90,8 @@ function ConnectMicrosoft({ connectError }: { connectError?: string }) {
 		const { error } = await authClient.linkSocial({
 			provider: "microsoft",
 			scopes: [...MICROSOFT_SYNC_SCOPES],
-			callbackURL: `${origin}/settings/connections`,
-			errorCallbackURL: `${origin}/settings/connections?provider=microsoft`,
+			callbackURL: `${origin}/${slug}/settings/connections/microsoft`,
+			errorCallbackURL: `${origin}/${slug}/settings/connections/microsoft?provider=microsoft`,
 		});
 
 		if (error) fail(error.message);
@@ -128,7 +136,7 @@ function ConnectMicrosoft({ connectError }: { connectError?: string }) {
 						<Icon icon={Warning} />
 						<AlertTitle>Microsoft did not finish connecting</AlertTitle>
 						<AlertDescription>
-							{CONNECT_ERRORS[connectError] ??
+							{CONNECT_ERRORS.get(connectError) ??
 								"Microsoft returned an error before the connection was made. Try again."}
 						</AlertDescription>
 					</Alert>
@@ -139,8 +147,10 @@ function ConnectMicrosoft({ connectError }: { connectError?: string }) {
 }
 
 export function MicrosoftConnection({
+	slug,
 	connectError,
 }: {
+	slug: string;
 	connectError?: string;
 }) {
 	const trpc = useTRPC();
@@ -168,7 +178,7 @@ export function MicrosoftConnection({
 		trpc.microsoft.revokeAccess.mutationOptions({
 			onSuccess: () =>
 				window.location.assign(
-					status.data?.required ? "/" : "/settings/connections",
+					status.data?.required ? "/" : `/${slug}/settings/connections`,
 				),
 			onError: (error) => toast.error(error.message),
 		}),
@@ -194,7 +204,9 @@ export function MicrosoftConnection({
 		status.data;
 
 	if (!configured) return <MicrosoftUnavailable />;
-	if (!linked) return <ConnectMicrosoft connectError={connectError} />;
+	if (!linked) {
+		return <ConnectMicrosoft slug={slug} connectError={connectError} />;
+	}
 
 	const failing = sources.filter(
 		(source) => source.status === "NEEDS_RECONNECT" || source.lastError,

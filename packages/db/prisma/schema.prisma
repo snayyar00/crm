@@ -31,6 +31,7 @@ model User {
   factDecisions  ContactFact[]       @relation("FactDecider")
   conversations  AgentConversation[] @relation("ConversationOwner")
   fieldValues    FieldValue[]        @relation("FieldValueUser")
+  savedViews     SavedView[]         @relation("SavedViewOwner")
 
   createdAgentDefinitions AgentDefinition[]             @relation("AgentDefinitionCreator")
   createdAgentVersions    AgentVersion[]                @relation("AgentVersionCreator")
@@ -40,14 +41,71 @@ model User {
   conversationShares      AgentConversationShare[]      @relation("ConversationShareCreator")
   conversationSubmissions AgentConversationSubmission[] @relation("ConversationSubmissionAuthor")
   conversationFeedback    AgentConversationFeedback[]   @relation("ConversationFeedbackAuthor")
+  slackMemberMatch        SlackMemberMatch?
 
   members     Member[]
   invitations Invitation[]
 
   ssoproviders SsoProvider[]
 
+  apiKeys Apikey[]
+
   @@unique([email])
   @@map("user")
+}
+
+model SlackMemberMatch {
+  id          String   @id @default(cuid())
+  crmUserId   String   @unique
+  crmUser     User     @relation(fields: [crmUserId], references: [id], onDelete: Cascade)
+  slackUserId String?
+  slackHandle String?
+  slackEmail  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slackUserId])
+  @@map("slackMemberMatch")
+}
+
+model SlackChannel {
+  id                String    @id
+  name              String
+  memberCount       Int?
+  available         Boolean   @default(true)
+  isPrivate         Boolean   @default(false)
+  isMember          Boolean   @default(false)
+  inviteRequestedAt DateTime?
+  classifiedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([available, name])
+  @@index([updatedAt])
+  @@map("slackChannel")
+}
+
+model SlackInstallation {
+  installerId String   @id
+  teamId      String
+  teamName    String?
+  userToken   String?
+  userScopes  String
+  createdAt   DateTime @default(now())
+
+  @@map("slackInstallation")
+}
+
+model SlackWorkspaceGrant {
+  id         String   @id @default(cuid())
+  teamId     String   @unique
+  teamName   String?
+  userToken  String
+  userScopes String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("slackWorkspaceGrant")
 }
 
 model Session {
@@ -179,6 +237,7 @@ enum RecordSource {
   IMPORT
   EMAIL
   CALENDAR
+  TRACKING
 }
 
 enum AgentConversationKind {
@@ -255,9 +314,9 @@ enum AgentResponseRating {
 }
 
 model Company {
-  id          String  @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
-  domain      String? @unique
+  domain      String?           @unique
   lifecycle   CompanyLifecycle?
   website     String?
   description String?
@@ -297,6 +356,7 @@ model Company {
   source RecordSource @default(MANUAL)
 
   lastActivityAt DateTime?
+  archivedAt     DateTime?
 
   contacts       Contact[]           @relation("CompanyContacts")
   conversations  AgentConversation[]
@@ -308,9 +368,11 @@ model Company {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
+  @@unique([domain], map: "company_domain_active_key", where: { archivedAt: null })
   @@index([ownerId])
   @@index([name])
   @@index([lastActivityAt])
+  @@index([archivedAt])
   @@map("company")
 }
 
@@ -328,9 +390,11 @@ model Contact {
   id          String  @id @default(cuid())
   firstName   String
   lastName    String?
-  email       String? @unique
+  email       String?
   phone       String?
   title       String?
+  seniority   String?
+  function    String?
   linkedinUrl String?
   twitterUrl  String?
   githubUrl   String?
@@ -355,6 +419,7 @@ model Contact {
   source RecordSource @default(MANUAL)
 
   lastActivityAt DateTime?
+  archivedAt     DateTime?
 
   deals           DealContact[]
   activities      Activity[]
@@ -362,12 +427,16 @@ model Contact {
   calendarEvents  CalendarEvent[]
   eventAttendance CalendarAttendee[]
   fieldValues     FieldValue[]
+  visitors        TrackedVisitor[]   @relation("VisitorContact")
+  submissions     FormSubmission[]   @relation("SubmissionContact")
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
+  @@unique([email], map: "contact_email_active_key", where: { archivedAt: null })
   @@index([companyId])
   @@index([ownerId])
   @@index([lastActivityAt])
+  @@index([archivedAt])
   @@map("contact")
 }
 
@@ -435,9 +504,11 @@ model AgentTask {
   id        String  @id @default(cuid())
   contactId String?
   companyId String?
+  dealId    String?
 
-  kind   String
-  reason String
+  kind    String
+  reason  String
+  payload Json?
 
   priority Int @default(0)
   budget   Int @default(4)
@@ -451,24 +522,31 @@ model AgentTask {
   finishedAt DateTime?
   outcome    String?
 
+  subject String?
+
   createdAt DateTime @default(now())
 
   @@index([dueAt, leasedUntil])
   @@index([contactId])
+  @@index([dealId])
+  @@index([kind, subject], where: { finishedAt: null })
   @@map("agentTask")
 }
 
 model AgentEvent {
-  id        String  @id
-  sessionId String
-  contactId String?
-  type      String
-  data      Json
+  id             String             @id
+  sessionId      String
+  contactId      String?
+  conversationId String?
+  conversation   AgentConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  type           String
+  data           Json
 
   emittedAt DateTime
 
   @@index([sessionId, emittedAt])
   @@index([contactId, emittedAt])
+  @@index([conversationId, emittedAt])
   @@map("agentEvent")
 }
 
@@ -490,9 +568,10 @@ model AgentConversation {
   agentId String?
   agent   AgentDefinition? @relation(fields: [agentId], references: [id], onDelete: SetNull)
 
-  sessionId         String? @unique
-  continuationToken String?
-  streamIndex       Int     @default(0)
+  sessionId           String? @unique
+  continuationToken   String?
+  streamIndex         Int     @default(0)
+  pendingInputRequest Json?
 
   title        String?
   messageCount Int     @default(0)
@@ -506,6 +585,7 @@ model AgentConversation {
   shares           AgentConversationShare[]
   submissions      AgentConversationSubmission[]
   feedback         AgentConversationFeedback[]
+  events           AgentEvent[]
   createdVersions  AgentVersion[]                @relation("AgentVersionSourceConversation")
   builderArtifacts AgentBuilderArtifact[]
 
@@ -774,6 +854,9 @@ model AgentRun {
   startedAt  DateTime?
   finishedAt DateTime?
 
+  cancelRequestedAt DateTime?
+  cancelDeliveredAt DateTime?
+
   events  AgentRunEvent[]
   actions AgentAction[]
 
@@ -917,14 +1000,14 @@ model Deal {
   ownerId       String
   owner         User                @relation("DealOwner", fields: [ownerId], references: [id])
 
-  stage             DealStage @default(DEMO_BOOKED)
+  stage             DealStage       @default(DEMO_BOOKED)
   /// Nullable, and deliberately has NO default — a default of AUDIT would be
   /// wrong 3 times in 4, and its error mode is inventing contractual deadlines.
   /// setStage refuses to close a deal as WON until this is known.
   engagementType    EngagementType?
-  stageChangedAt    DateTime  @default(now())
-  amount            Decimal?  @db.Decimal(14, 2)
-  currency          String    @default("USD")
+  stageChangedAt    DateTime        @default(now())
+  amount            Decimal?        @db.Decimal(14, 2)
+  currency          String          @default("USD")
   expectedCloseDate DateTime?
   closedAt          DateTime?
   /// When the customer gave us what we need to actually start — for an audit,
@@ -945,6 +1028,7 @@ model Deal {
   fxRateAt     DateTime?
 
   lastActivityAt DateTime?
+  archivedAt     DateTime?
 
   contacts    DealContact[]
   activities  Activity[]
@@ -959,6 +1043,7 @@ model Deal {
   @@index([lastActivityAt])
   @@index([baseAmount])
   @@index([currency])
+  @@index([archivedAt])
   @@map("deal")
 }
 
@@ -1024,10 +1109,11 @@ model FieldDefinition {
   agentFilled Boolean @default(true)
   agentBrief  String?
 
-  required    Boolean @default(false)
-  showOnSheet Boolean @default(true)
-  showOnTable Boolean @default(false)
-  position    Int
+  required     Boolean @default(false)
+  showOnSheet  Boolean @default(true)
+  showOnTable  Boolean @default(false)
+  showOnFilter Boolean @default(false)
+  position     Int
 
   archivedAt DateTime?
 
@@ -1093,6 +1179,24 @@ model FieldValue {
   @@map("fieldValue")
 }
 
+model SavedView {
+  id      String      @id @default(cuid())
+  entity  FieldEntity
+  name    String
+  shared  Boolean     @default(false)
+  filters Json
+
+  ownerId String
+  owner   User   @relation("SavedViewOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entity, ownerId, name])
+  @@index([entity, shared])
+  @@map("savedView")
+}
+
 model Activity {
   id      String       @id @default(cuid())
   type    ActivityType
@@ -1119,7 +1223,7 @@ model Activity {
   /// promise back, and makes promise-to-delivery lag measurable later without a
   /// separate Commitment table (an obligation is a TASK; a second list nobody
   /// opens is how the first list stopped being drained).
-  sourceMessageId String?
+  sourceMessageId       String?
   /// The queued email that satisfied this obligation, once one exists.
   deliveredByEmailJobId String?
 
@@ -1305,9 +1409,142 @@ model AppSetting {
 
   ratesRefreshedAt DateTime?
 
+  archiveRetentionDays Int @default(180)
+
+  trackingSiteId           String? @unique
+  trackingCrossDomain      Boolean @default(true)
+  trackingLimitToDomains   Boolean @default(true)
+  trackingCookieSubdomains Boolean @default(false)
+  trackingSecureCookies    Boolean @default(true)
+  trackingHonourDnt        Boolean @default(true)
+  trackingCookieDays       Int     @default(395)
+  trackingConfigHash       String?
+  trackingPaused           Boolean @default(false)
+
   updatedAt DateTime @updatedAt
 
   @@map("appSetting")
+}
+
+enum DomainScope {
+  SITE_AND_SUBDOMAINS
+  EXACT_HOST
+}
+
+model TrackedDomain {
+  id    String      @id @default(cuid())
+  host  String      @unique
+  scope DomainScope @default(EXACT_HOST)
+
+  pageViews  Int       @default(0)
+  lastSeenAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@map("trackedDomain")
+}
+
+model TrackedVisitor {
+  id String @id
+
+  contactId String?
+  contact   Contact? @relation("VisitorContact", fields: [contactId], references: [id], onDelete: SetNull)
+
+  firstSource   String?
+  firstMedium   String?
+  firstCampaign String?
+  firstTerm     String?
+  firstContent  String?
+  firstReferrer String?
+  firstLanding  String?
+  firstTouchAt  DateTime?
+
+  lastSource   String?
+  lastMedium   String?
+  lastCampaign String?
+  lastTerm     String?
+  lastContent  String?
+  lastReferrer String?
+  lastLanding  String?
+  lastTouchAt  DateTime?
+
+  firstSeen DateTime @default(now())
+  lastSeen  DateTime @updatedAt
+
+  @@index([contactId])
+  @@index([firstSource])
+  @@map("trackedVisitor")
+}
+
+model TrackedEvent {
+  id String @id @default(cuid())
+
+  visitorId String
+  type      String
+  host      String
+  path      String
+  referrer  String?
+  label     String?
+
+  source   String?
+  medium   String?
+  campaign String?
+
+  occurredAt DateTime
+
+  @@index([visitorId, occurredAt])
+  @@index([occurredAt])
+  @@index([host, occurredAt])
+  @@index([source, occurredAt])
+  @@map("trackedEvent")
+}
+
+model TrackingCounter {
+  key       String   @id
+  value     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("trackingCounter")
+}
+
+model TrackedPageDaily {
+  day      DateTime
+  host     String
+  path     String
+  views    Int      @default(0)
+  visitors Int      @default(0)
+
+  @@id([day, host, path])
+  @@index([host, day])
+  @@map("trackedPageDaily")
+}
+
+model FormSubmission {
+  id String @id @default(cuid())
+
+  visitorId String?
+  contactId String?
+  contact   Contact? @relation("SubmissionContact", fields: [contactId], references: [id], onDelete: SetNull)
+
+  host  String
+  path  String
+  email String?
+
+  fields Json
+
+  firstTouch Json?
+  lastTouch  Json?
+
+  dedupeKey  String    @unique
+  filedAt    DateTime?
+  skipReason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([contactId])
+  @@index([createdAt])
+  @@map("formSubmission")
 }
 
 model Install {
@@ -1428,16 +1665,16 @@ model EmailJob {
   to      String[]
   cc      String[]
   subject String
-  body    String  @db.Text
+  body    String   @db.Text
 
   /// Base64 attachments, [{ name, content }]. Kept small — big files belong in blob storage.
   attachments Json?
 
-  status   EmailJobStatus @default(DRAFT)
-  dueAt    DateTime?
-  sentAt   DateTime?
-  attempts Int            @default(0)
-  error    String?
+  status    EmailJobStatus @default(DRAFT)
+  dueAt     DateTime?
+  sentAt    DateTime?
+  attempts  Int            @default(0)
+  error     String?
   /// Provider message id, once accepted.
   messageId String?
 
@@ -1463,4 +1700,35 @@ enum EmailJobStatus {
   SENT
   FAILED
   CANCELLED
+}
+
+model Apikey {
+  id                  String    @id
+  configId            String    @default("default")
+  name                String?
+  start               String?
+  referenceId         String
+  user                User      @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+  prefix              String?
+  key                 String
+  refillInterval      Int?
+  refillAmount        Int?
+  lastRefillAt        DateTime?
+  enabled             Boolean?  @default(true)
+  rateLimitEnabled    Boolean?  @default(true)
+  rateLimitTimeWindow Int?
+  rateLimitMax        Int?
+  requestCount        Int?      @default(0)
+  remaining           Int?
+  lastRequest         DateTime?
+  expiresAt           DateTime?
+  createdAt           DateTime
+  updatedAt           DateTime
+  permissions         String?
+  metadata            String?
+
+  @@index([referenceId])
+  @@index([configId])
+  @@index([key])
+  @@map("apikey")
 }

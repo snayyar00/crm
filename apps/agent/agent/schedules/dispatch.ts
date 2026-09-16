@@ -1,25 +1,30 @@
 import { defineSchedule } from "eve/schedules";
 import crm from "../channels/crm";
+import { sweepBlankFacts } from "../lib/blank-facts";
 import {
 	pendingAgentRunIds,
 	pendingBuilderSubmissionIds,
 	queueDueAgentRuns,
 } from "../lib/custom-agent-dispatch";
 import { brief, drainAll, taskAuth } from "../lib/dispatch";
+import { reconcileStaleTasks } from "../lib/stale-tasks";
 
 export default defineSchedule({
 	cron: "* * * * *",
 	async run({ receive, waitUntil, appAuth }) {
 		waitUntil(
 			Promise.all([
-				drainAll((task) =>
-					receive(crm, {
-						message: brief(task),
-						target: { taskId: task.id },
-						auth: taskAuth(task, appAuth),
-					}),
-				),
+				sweepBlankFacts(),
+
 				(async () => {
+					await reconcileStaleTasks();
+					await drainAll((task) =>
+						receive(crm, {
+							message: brief(task),
+							target: { taskId: task.id },
+							auth: taskAuth(task, appAuth),
+						}),
+					);
 					await queueDueAgentRuns();
 					const [builderIds, runIds] = await Promise.all([
 						pendingBuilderSubmissionIds(),

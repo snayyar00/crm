@@ -9,13 +9,14 @@ import {
 import { RequestLoggerMiddleware } from "../src/logging/request-logger.middleware";
 
 function withNodeEnv(value: string, fn: () => void): void {
-	const previous = process.env.NODE_ENV;
-	process.env.NODE_ENV = value;
+	const env = process.env as { NODE_ENV: string };
+	const previous = env.NODE_ENV;
+	env.NODE_ENV = value;
 
 	try {
 		fn();
 	} finally {
-		process.env.NODE_ENV = previous;
+		env.NODE_ENV = previous;
 	}
 }
 
@@ -121,11 +122,13 @@ describe("request context", () => {
 	});
 });
 
+type MiddlewareRun = {
+	requestId: string;
+	seen: string | undefined;
+};
+
 describe("RequestLoggerMiddleware", () => {
-	function run(headers: Record<string, string>): {
-		requestId: string;
-		seen: string | undefined;
-	} {
+	function run(headers: Record<string, string>): MiddlewareRun {
 		const middleware = new RequestLoggerMiddleware();
 		let requestId = "";
 		let seen: string | undefined;

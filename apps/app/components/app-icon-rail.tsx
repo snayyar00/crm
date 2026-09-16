@@ -1,16 +1,16 @@
 "use client";
 
-import Bot from "@carbon/icons-react/es/Bot";
 import Building from "@carbon/icons-react/es/Building";
 import Calendar from "@carbon/icons-react/es/Calendar";
-import type { CarbonIconType } from "@carbon/icons-react/es/CarbonIcon";
 import Close from "@carbon/icons-react/es/Close";
 import Dashboard from "@carbon/icons-react/es/Dashboard";
 import Partnership from "@carbon/icons-react/es/Partnership";
 import Settings from "@carbon/icons-react/es/Settings";
 import UserMultiple from "@carbon/icons-react/es/UserMultiple";
 import { Button } from "@crm/ui/components/button";
+import type { CarbonIcon } from "@crm/ui/components/icon";
 import { Icon } from "@crm/ui/components/icon";
+import Bot from "@crm/ui/components/icons/bot";
 import {
 	Sheet,
 	SheetContent,
@@ -34,13 +34,22 @@ import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 type RailItem = {
 	title: string;
 	href: string;
-	icon: CarbonIconType;
+	icon: CarbonIcon;
+	iconClassName?: string;
 	match: "exact" | "prefix";
 	related?: string[];
 };
 
 const ITEMS: RailItem[] = [
 	{ title: "Overview", href: "/", icon: Dashboard, match: "exact" },
+	{
+		title: "Chat",
+		href: "/chat",
+		icon: Bot,
+		iconClassName: "size-5",
+		match: "prefix",
+		related: ["/agents"],
+	},
 	{ title: "Companies", href: "/companies", icon: Building, match: "prefix" },
 	{
 		title: "Contacts",
@@ -50,13 +59,6 @@ const ITEMS: RailItem[] = [
 	},
 	{ title: "Deals", href: "/deals", icon: Partnership, match: "prefix" },
 	{ title: "Calendar", href: "/calendar", icon: Calendar, match: "prefix" },
-	{
-		title: "Chat",
-		href: "/chat",
-		icon: Bot,
-		match: "prefix",
-		related: ["/agents"],
-	},
 	{ title: "Settings", href: "/settings", icon: Settings, match: "prefix" },
 ];
 
@@ -98,7 +100,7 @@ function RailLink({
 						aria-current={active ? "page" : undefined}
 						transitionTypes={["nav-lateral"]}
 					>
-						<Icon icon={item.icon} />
+						<Icon icon={item.icon} className={item.iconClassName} />
 						<span className="sr-only">{item.title}</span>
 					</Link>
 				</Button>
@@ -140,7 +142,7 @@ function MobileRailLink({
 					item.title === "Chat" ? "nav-forward" : "nav-lateral",
 				]}
 			>
-				<Icon icon={item.icon} />
+				<Icon icon={item.icon} className={item.iconClassName} />
 				<span>{item.title}</span>
 			</Link>
 		</Button>
@@ -177,7 +179,7 @@ function MobileRailIconLink({
 				aria-current={active ? "page" : undefined}
 				onClick={onNavigate}
 			>
-				<Icon icon={item.icon} />
+				<Icon icon={item.icon} className={item.iconClassName} />
 				<span className="sr-only">{item.title}</span>
 			</Link>
 		</Button>
@@ -199,7 +201,7 @@ export function AppIconRailFallback() {
 					disabled
 					className="text-muted-foreground"
 				>
-					<Icon icon={item.icon} />
+					<Icon icon={item.icon} className={item.iconClassName} />
 					<span className="sr-only">{item.title}</span>
 				</Button>
 			))}

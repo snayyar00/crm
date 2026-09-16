@@ -2,20 +2,27 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { DealStage, db, RateSource } from "@crm/db";
 import { normalizeCurrency } from "@crm/db/currency";
 import { SETTINGS_ID, writeReportingCurrency } from "@crm/db/settings";
+import type { AgentTriggerService } from "../src/agent/agent-trigger.service";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DashboardService } from "../src/dashboard/dashboard.service";
 import { DealsService } from "../src/deals/deals.service";
 import { FieldsService } from "../src/fields/fields.service";
 import { ObligationsService } from "../src/obligations/obligations.service";
+import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "currency-totals-spec";
 const userId = `user-${suffix}`;
 const domain = `money-${suffix}.test`;
 
+const agent = {
+	withCrmEvents: withDiscardedCrmEvents,
+} as unknown as AgentTriggerService;
+
 const conversion = new ConversionService(db);
 const deals = new DealsService(
 	db,
+	agent,
 	new ActivityStampService(db),
 	conversion,
 	new FieldsService(db, { fieldBackfill: async () => undefined } as never),
@@ -229,9 +236,11 @@ describe("the deals list", () => {
 			sort: "amount",
 			dir: "desc",
 			status: "open",
-			owner: userId,
-			stage: "all",
-			closing: "all",
+			owner: [userId],
+			stage: [],
+			closing: [],
+			fields: {},
+			archived: false,
 		});
 
 		expect(list.reportingCurrency).toBe("USD");

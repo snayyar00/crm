@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import {
 	cpSync,
 	existsSync,
@@ -30,7 +30,15 @@ const EXTERNALS = [
 	"cardinal",
 ];
 
-const VENDOR_ROOTS = ["express"];
+const VENDOR_ROOTS = [
+	"express",
+	"@nestjs/swagger",
+	"reflect-metadata",
+	"@nestjs/common",
+	"@nestjs/core",
+	"class-transformer",
+	"class-validator",
+];
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(funcDir, { recursive: true });
@@ -102,7 +110,18 @@ function vendorDeps(realDir, name, placedDir) {
 	} catch {
 		return;
 	}
-	for (const depName of Object.keys(pj.dependencies || {})) {
+	const optionalPeers = new Set(
+		Object.entries(pj.peerDependenciesMeta || {})
+			.filter(([, meta]) => meta.optional)
+			.map(([depName]) => depName),
+	);
+	const depNames = new Set([
+		...Object.keys(pj.dependencies || {}),
+		...Object.keys(pj.peerDependencies || {}).filter(
+			(depName) => !optionalPeers.has(depName),
+		),
+	]);
+	for (const depName of depNames) {
 		const depReal = resolveDep(realDir, name, depName);
 		if (!depReal) {
 			console.warn(`  ! not found: ${depName} (needed by ${name})`);
@@ -164,7 +183,9 @@ writeFileSync(
 
 console.log(`✓ built ${outDir}`);
 
-const directDatabaseUrl = !process.env.VERCEL
+const isProductionDeployment = process.env.VERCEL_ENV === "production";
+
+const directDatabaseUrl = !isProductionDeployment
 	? undefined
 	: process.env.DIRECT_DATABASE_URL ||
 		process.env.POSTGRES_URL_NON_POOLING ||
@@ -173,14 +194,59 @@ const directDatabaseUrl = !process.env.VERCEL
 
 if (!process.env.VERCEL) {
 	console.log("• not a Vercel build — skipping migrations");
+} else if (!isProductionDeployment) {
+	console.log(
+		`• ${process.env.VERCEL_ENV || "non-production"} deployment — skipping migrations, only production applies them`,
+	);
 } else if (!directDatabaseUrl) {
 	console.log("• no database URL at build time — skipping migrations");
 } else {
+	const dbDir = join(repoRoot, "packages/db");
+	const dbEnv = { ...process.env, DATABASE_URL: directDatabaseUrl };
+
 	console.log("• applying migrations (prisma migrate deploy)...");
 	execSync(`${bun} x prisma migrate deploy`, {
-		cwd: join(repoRoot, "packages/db"),
+		cwd: dbDir,
 		stdio: "inherit",
-		env: { ...process.env, DATABASE_URL: directDatabaseUrl },
+		env: dbEnv,
 	});
 	console.log("✓ migrations applied");
+
+	console.log("• checking the deployed schema against schema.prisma...");
+	const drift = spawnSync(
+		bun,
+		[
+			"x",
+			"prisma",
+			"migrate",
+			"diff",
+			"--from-config-datasource",
+			"--to-schema",
+			join("prisma", "schema.prisma"),
+			"--exit-code",
+		],
+		{ cwd: dbDir, encoding: "utf8", env: dbEnv },
+	);
+
+	if (drift.status === 0) {
+		console.log("✓ schema matches");
+	} else if (drift.status === 2) {
+		console.log("");
+		console.log("!!  THE PRODUCTION SCHEMA DOES NOT MATCH schema.prisma  !!");
+		console.log(
+			"    Every migration is recorded as applied, so `migrate deploy` will keep reporting",
+		);
+		console.log(
+			"    nothing pending while queries fail on columns that are not there. Reconcile with",
+		);
+		console.log(
+			"    `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`.",
+		);
+		console.log("");
+		console.log(drift.stdout || "");
+	} else {
+		console.log(
+			`• could not compare the schema (${drift.stderr?.trim() || "unknown error"})`,
+		);
+	}
 }

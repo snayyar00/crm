@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AgentModule } from "../agent/agent.module";
 import { CurrencyModule } from "../currency/currency.module";
 import { FieldsModule } from "../fields/fields.module";
 import { ObligationsModule } from "../obligations/obligations.module";
@@ -7,7 +8,13 @@ import { DealsRouter } from "./deals.router";
 import { DealsService } from "./deals.service";
 
 @Module({
-	imports: [FieldsModule, TrpcModule, CurrencyModule, ObligationsModule],
+	imports: [
+		AgentModule,
+		FieldsModule,
+		TrpcModule,
+		CurrencyModule,
+		ObligationsModule,
+	],
 	providers: [DealsService, DealsRouter],
 	exports: [DealsService],
 })

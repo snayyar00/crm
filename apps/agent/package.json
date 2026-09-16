@@ -5,6 +5,7 @@
 	"type": "module",
 	"license": "MIT",
 	"scripts": {
+		"backfill:facts": "bun scripts/backfill-empty-facts.ts",
 		"backfill:images": "bun scripts/backfill-brand-images.ts",
 		"dev": "eve dev",
 		"dev:headless": "eve dev --no-ui",
@@ -21,7 +22,8 @@
 		"@crm/db": "workspace:*",
 		"@crm/env": "workspace:*",
 		"@crm/telemetry": "workspace:*",
-		"context.dev": "^2.7.0",
+		"@crm/validation": "workspace:*",
+		"context.dev": "2.10.0",
 		"eve": "^0.29.4",
 		"zod": "^4.4.3"
 	},

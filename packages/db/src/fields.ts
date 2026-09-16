@@ -3,6 +3,7 @@ import {
 	type FieldValueColumn,
 	FieldValueError,
 	type FieldValueJson,
+	type FieldValueWrite,
 	recordColumn,
 	typeLabel,
 } from "./fields-shape";
@@ -38,6 +39,7 @@ export type SerializedField = {
 	required: boolean;
 	showOnSheet: boolean;
 	showOnTable: boolean;
+	showOnFilter: boolean;
 	position: number;
 	archived: boolean;
 	options: SerializedFieldOption[];
@@ -58,6 +60,7 @@ export function serializeField(
 		required: definition.required,
 		showOnSheet: definition.showOnSheet,
 		showOnTable: definition.showOnTable,
+		showOnFilter: definition.showOnFilter,
 		position: definition.position,
 		archived: definition.archivedAt !== null,
 		options: definition.options
@@ -99,7 +102,7 @@ const ISO_DATE_TIME =
 export function coerceValue(
 	definition: FieldDefinitionWithOptions,
 	input: unknown,
-): Partial<Record<FieldValueColumn, unknown>> {
+): FieldValueWrite {
 	const blank =
 		input === null ||
 		input === undefined ||

@@ -9,8 +9,17 @@ let dealId: string;
 let companyId: string;
 
 beforeAll(async () => {
-	const owner = await db.user.findFirst({ select: { id: true } });
-	if (!owner) throw new Error("Test database has no user row.");
+	const ownerId = `native-deal-owner-${suffix}`;
+	const owner = await db.user.upsert({
+		where: { id: ownerId },
+		create: {
+			id: ownerId,
+			name: "Native Deal Spec Owner",
+			email: `${ownerId}@example.test`,
+		},
+		update: {},
+		select: { id: true },
+	});
 
 	await db.company.deleteMany({ where: { domain } });
 	const company = await db.company.create({

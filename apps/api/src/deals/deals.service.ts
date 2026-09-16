@@ -2,6 +2,7 @@ import {
 	ActivityType,
 	type Db,
 	type DealStage,
+	type EngagementType,
 	type Prisma,
 	Prisma as PrismaNamespace,
 } from "@crm/db";
@@ -12,12 +13,15 @@ import {
 	LOSING_DEAL_STAGES,
 	OPEN_DEAL_STAGES,
 } from "@crm/db/deal-stage";
+import type { FieldDefinitionWithOptions } from "@crm/db/fields";
 import {
 	BadRequestException,
 	Injectable,
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import { AgentTriggerService } from "../agent/agent-trigger.service";
+import { ARCHIVE } from "../archive/archive-config";
 import {
 	ActivityStampService,
 	type StampTargets,
@@ -34,10 +38,12 @@ import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
 import { ObligationsService } from "../obligations/obligations.service";
 import {
+	archivedFilter,
 	countsByKey,
-	FACET_ALL,
 	FACET_UNASSIGNED,
 	type ListResult,
+	type OrderByColumns,
+	ownerFilter,
 	paginate,
 	resolveOrderBy,
 } from "../trpc/list-input";
@@ -83,10 +89,7 @@ const CONTACT_SELECT = {
 
 const LOSING = new Set<DealStage>(LOSING_DEAL_STAGES);
 
-const SORTABLE: Record<
-	string,
-	(dir: Prisma.SortOrder) => Prisma.DealOrderByWithRelationInput[]
-> = {
+const SORTABLE: OrderByColumns<Prisma.DealOrderByWithRelationInput[]> = {
 	name: (dir) => [{ name: dir }],
 	company: (dir) => [{ company: { name: dir } }, { name: "asc" }],
 	stage: (dir) => [{ stage: dir }, { expectedCloseDate: "asc" }],
@@ -95,6 +98,7 @@ const SORTABLE: Record<
 	createdAt: (dir) => [{ createdAt: dir }],
 	owner: (dir) => [{ owner: { name: dir } }, { name: "asc" }],
 	lastActivity: (dir) => [{ lastActivityAt: { sort: dir, nulls: "last" } }],
+	archivedAt: (dir) => [{ archivedAt: { sort: dir, nulls: "last" } }],
 };
 
 @Injectable()
@@ -103,6 +107,7 @@ export class DealsService {
 
 	constructor(
 		@InjectDatabase() private readonly db: Db,
+		private readonly agent: AgentTriggerService,
 		private readonly stamp: ActivityStampService,
 		private readonly conversion: ConversionService,
 		private readonly fields: FieldsService,
@@ -110,7 +115,8 @@ export class DealsService {
 	) {}
 
 	async list(input: DealListInput) {
-		const where = this.buildWhere(input);
+		const filterableFields = await this.fields.filterableFieldsFor("DEAL");
+		const where = this.buildWhere(input, filterableFields);
 		const { skip, take } = paginate(input);
 
 		const openWhere = { ...where, stage: { in: [...OPEN_DEAL_STAGES] } };
@@ -136,10 +142,11 @@ export class DealsService {
 						owner: { select: OWNER_SELECT },
 						lastActivityAt: true,
 						createdAt: true,
+						archivedAt: true,
 					},
 				}),
 				this.db.deal.count({ where }),
-				this.facetCounts(input),
+				this.facetCounts(input, filterableFields),
 				this.db.deal.aggregate({
 					where: { AND: [openWhere, this.conversion.countedWhere(base)] },
 					_sum: { baseAmount: true },
@@ -161,6 +168,7 @@ export class DealsService {
 					closedAt,
 					lastActivityAt,
 					createdAt,
+					archivedAt,
 					...row
 				}) => ({
 					...row,
@@ -170,6 +178,7 @@ export class DealsService {
 					closedAt: closedAt?.toISOString() ?? null,
 					lastActivityAt: lastActivityAt?.toISOString() ?? null,
 					createdAt: createdAt.toISOString(),
+					archivedAt: archivedAt?.toISOString() ?? null,
 					fields: tableFields.get(row.id) ?? {},
 				}),
 			),
@@ -203,6 +212,7 @@ export class DealsService {
 				closedAt: true,
 				closedReason: true,
 				createdAt: true,
+				archivedAt: true,
 				company: { select: { ...COMPANY_SELECT, industry: true } },
 				owner: { select: OWNER_SELECT },
 				contacts: {
@@ -216,7 +226,15 @@ export class DealsService {
 			throw new NotFoundException(`No deal with id ${id}.`);
 		}
 
-		const { contacts, amount, baseAmount, fxRate, fxRateAt, ...rest } = deal;
+		const {
+			contacts,
+			amount,
+			baseAmount,
+			fxRate,
+			fxRateAt,
+			archivedAt,
+			...rest
+		} = deal;
 
 		return {
 			...rest,
@@ -230,6 +248,7 @@ export class DealsService {
 			expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
 			closedAt: deal.closedAt?.toISOString() ?? null,
 			createdAt: deal.createdAt.toISOString(),
+			archivedAt: archivedAt?.toISOString() ?? null,
 			contacts: contacts.map(({ role, contact }) => ({ ...contact, role })),
 		};
 	}
@@ -248,23 +267,42 @@ export class DealsService {
 		);
 
 		try {
-			const deal = await this.db.deal.create({
-				data: {
-					name: input.name.trim(),
-					companyId: input.companyId,
-					ownerId: input.ownerId,
-					stage,
-					stageChangedAt: now,
-					closedAt: closed ? now : null,
-					amount: fromCents(input.amountCents),
-					currency,
-					...fx,
-					expectedCloseDate: parseDate(input.expectedCloseDate),
-				},
-				select: { id: true, name: true, companyId: true },
+			const deal = await this.agent.withCrmEvents(async (tx, emit) => {
+				const created = await tx.deal.create({
+					data: {
+						name: input.name.trim(),
+						companyId: input.companyId,
+						ownerId: input.ownerId,
+						stage,
+						stageChangedAt: now,
+						closedAt: closed ? now : null,
+						amount: fromCents(input.amountCents),
+						currency,
+						...fx,
+						expectedCloseDate: parseDate(input.expectedCloseDate),
+					},
+					select: { id: true, name: true, companyId: true },
+				});
+				await emit({
+					type: "deal.created",
+					record: { kind: "deal", id: created.id },
+					occurredAt: now,
+					data: { companyId: created.companyId, stage },
+				});
+				if (closed) {
+					await emit({
+						type: "deal.closed",
+						record: { kind: "deal", id: created.id },
+						occurredAt: now,
+						data: { companyId: created.companyId, from: null, to: stage },
+					});
+				}
+				return created;
 			});
 
 			this.logger.log({ message: "Deal created", dealId: deal.id, stage });
+
+			void this.fields.queueBackfillForNewRecord("DEAL", deal.id);
 
 			return deal;
 		} catch (error) {
@@ -364,12 +402,68 @@ export class DealsService {
 		}
 	}
 
-	async delete(id: string): Promise<{ id: string; name: string }> {
-		let deleted: { targets: StampTargets; name: string };
+	async archive(id: string): Promise<{ id: string; name: string }> {
+		try {
+			const deal = await this.db.deal.update({
+				where: { id },
+				data: { archivedAt: new Date() },
+				select: { name: true },
+			});
+
+			this.logger.log({ message: "Deal archived", dealId: id });
+
+			return { id, name: deal.name };
+		} catch (error) {
+			throw this.translate(error, id);
+		}
+	}
+
+	async restore(id: string): Promise<{ id: string; name: string }> {
+		try {
+			const deal = await this.db.deal.update({
+				where: { id },
+				data: { archivedAt: null },
+				select: { name: true },
+			});
+
+			this.logger.log({ message: "Deal restored", dealId: id });
+
+			return { id, name: deal.name };
+		} catch (error) {
+			throw this.translate(error, id);
+		}
+	}
+
+	async purge(id: string): Promise<{ id: string; name: string }>;
+	async purge(
+		id: string,
+		guard: { archivedBefore: Date },
+	): Promise<{ id: string; name: string } | null>;
+	async purge(
+		id: string,
+		guard?: { archivedBefore: Date },
+	): Promise<{ id: string; name: string } | null> {
+		let deleted: { targets: StampTargets; name: string } | null;
 
 		try {
 			deleted = await this.db.$transaction(async (tx) => {
+				const [row] = await tx.$queryRaw<Array<{ archivedAt: Date | null }>>`
+					SELECT "archivedAt" FROM deal WHERE id = ${id} FOR UPDATE
+				`;
+
+				if (!row) {
+					if (guard) return null;
+					throw new NotFoundException(`No deal with id ${id}.`);
+				}
+				if (
+					guard &&
+					(!row.archivedAt || row.archivedAt > guard.archivedBefore)
+				) {
+					return null;
+				}
+
 				const targets = await this.stamp.targetsOf({ dealId: id }, tx);
+				await tx.agentTask.deleteMany({ where: { dealId: id } });
 
 				const deal = await tx.deal.delete({
 					where: { id },
@@ -382,10 +476,12 @@ export class DealsService {
 			throw this.translate(error, id);
 		}
 
+		if (!deleted) return null;
+
 		await this.stamp.recomputeAfterDelete(deleted.targets, { dealId: id });
 
 		this.logger.log({
-			message: "Deal deleted",
+			message: "Deal purged",
 			dealId: id,
 			name: deleted.name,
 		});
@@ -393,105 +489,71 @@ export class DealsService {
 		return { id, name: deleted.name };
 	}
 
-	async setStage(input: SetStageInput, actingUserId: string) {
-		const deal = await this.db.deal.findUnique({
-			where: { id: input.id },
-			select: { id: true, stage: true, companyId: true, engagementType: true },
+	async purgeExpired(before: Date): Promise<BulkResult> {
+		const expired = await this.db.deal.findMany({
+			where: { archivedAt: { lte: before } },
+			select: { id: true },
+			take: ARCHIVE.prune.maxBatch,
 		});
 
-		if (!deal) {
-			throw new NotFoundException(`No deal with id ${input.id}.`);
-		}
+		return runBulk(
+			expired.map((row) => row.id),
+			(id) => this.purge(id, { archivedBefore: before }),
+		);
+	}
 
-		if (deal.stage === input.stage) {
-			// A deal won BEFORE the engagement-type rule shipped carries no type, and
-			// this early return used to make that permanent: setStage refused to do
-			// anything for a stage it was already in, and no other endpoint accepts
-			// the field. So the obligations for every previously-won deal — including
-			// a signed audit SOW — could never be created at all.
-			//
-			// Naming the type on an already-won deal is therefore a real operation,
-			// not a no-op, and it spawns exactly what the original win would have.
-			// Still guarded: only CLOSED_WON, only when a type is actually supplied,
-			// and only when it CHANGES something.
-			if (input.stage === "CLOSED_WON" && input.engagementType) {
-				// Deliberately fires even when the type is UNCHANGED. Naming the
-				// engagement type is what derives the contractual clocks, so restating
-				// it RECONCILES them against the deal as it stands now.
-				//
-				// That matters because the dates hang off `closedAt`. Questback was
-				// recorded as won on 8 Aug but its SOW was signed on 14 July, so every
-				// obligation was three and a half weeks optimistic; correcting the date
-				// left no way to re-derive them, and the only route was to cycle the
-				// type through OTHER and back. An operation that exists only as a
-				// workaround is not an operation.
-				//
-				// Safe to repeat: ensure() is idempotent on the obligation key, so this
-				// either re-dates a row whose due date moved or does nothing at all. It
-				// never duplicates — the partial unique index would reject that anyway.
-				if (input.engagementType !== deal.engagementType) {
-					await this.db.deal.update({
-						where: { id: input.id },
-						data: { engagementType: input.engagementType },
-					});
-				}
-				let spawned: unknown = null;
-				try {
-					spawned = await this.obligations.spawnForWonDeal(
-						deal.id,
-						actingUserId,
-					);
-				} catch (err) {
-					this.logger.error({
-						message:
-							"Could not spawn obligations for a back-filled engagement type",
-						dealId: deal.id,
-						detail: err instanceof Error ? err.message : String(err),
-					});
-				}
-				this.logger.log({
-					message: "Obligations reconciled on an already-won deal",
-					dealId: deal.id,
-					engagementType: input.engagementType,
-					typeChanged: input.engagementType !== deal.engagementType,
-					spawned,
-				});
+	async setStage(input: SetStageInput, actingUserId: string) {
+		const closedReason = input.closedReason?.trim();
+		const closed = isClosedStage(input.stage);
+		const transition = await this.agent.withCrmEvents(async (tx, emit) => {
+			const [deal] = await tx.$queryRaw<
+				Array<{
+					id: string;
+					stage: DealStage;
+					companyId: string;
+					engagementType: EngagementType | null;
+				}>
+			>`
+				SELECT id, stage, "companyId", "engagementType"
+				FROM deal
+				WHERE id = ${input.id}
+				FOR UPDATE
+			`;
+
+			if (!deal) {
+				throw new NotFoundException(`No deal with id ${input.id}.`);
+			}
+
+			if (deal.stage === input.stage) {
 				return {
-					id: deal.id,
-					stage: deal.stage,
-					changed: false,
-					engagementTypeSet: input.engagementType,
-					obligationsReconciled: true,
+					changed: false as const,
+					deal,
+					updated: { id: deal.id, stage: deal.stage },
+					now: null,
 				};
 			}
-			return { id: deal.id, stage: deal.stage, changed: false };
-		}
+			if (LOSING.has(input.stage) && !closedReason) {
+				throw new BadRequestException(
+					"Say why it was lost — a closed-lost deal with no reason teaches nobody anything.",
+				);
+			}
 
-		const closedReason = input.closedReason?.trim();
-		if (LOSING.has(input.stage) && !closedReason) {
-			throw new BadRequestException(
-				"Say why it was lost — a closed-lost deal with no reason teaches nobody anything.",
-			);
-		}
+			// The winning mirror of the rule above. An audit engagement carries five
+			// contractual deliverables and a 6-month re-check; a subscription carries
+			// none. Nothing else in the schema distinguishes them, so closing a deal as
+			// won while this is unknown would either invent deadlines or silently drop
+			// real ones. Asked here because this is a transition the founder already
+			// performs — a separate optional control would simply never be used.
+			const engagementType =
+				input.engagementType ?? deal.engagementType ?? null;
+			if (input.stage === "CLOSED_WON" && !engagementType) {
+				throw new BadRequestException(
+					"Say what kind of engagement this was — an audit spawns five contractual deliverables and a 6-month re-check, a subscription spawns none.",
+				);
+			}
 
-		// The winning mirror of the rule above. An audit engagement carries five
-		// contractual deliverables and a 6-month re-check; a subscription carries
-		// none. Nothing else in the schema distinguishes them, so closing a deal as
-		// won while this is unknown would either invent deadlines or silently drop
-		// real ones. Asked here because this is a transition the founder already
-		// performs — a separate optional control would simply never be used.
-		const engagementType = input.engagementType ?? deal.engagementType ?? null;
-		if (input.stage === "CLOSED_WON" && !engagementType) {
-			throw new BadRequestException(
-				"Say what kind of engagement this was — an audit spawns five contractual deliverables and a 6-month re-check, a subscription spawns none.",
-			);
-		}
-
-		const now = new Date();
-		const closed = isClosedStage(input.stage);
-
-		const [updated] = await this.db.$transaction([
-			this.db.deal.update({
+			const now = new Date();
+			const updated = await tx.deal.update({
 				where: { id: input.id },
 				data: {
 					stage: input.stage,
@@ -501,8 +563,8 @@ export class DealsService {
 					closedReason: closed ? (closedReason ?? null) : null,
 				},
 				select: { id: true, stage: true },
-			}),
-			this.db.activity.create({
+			});
+			await tx.activity.create({
 				data: {
 					type: ActivityType.STAGE_CHANGE,
 					subject: "Stage changed",
@@ -513,13 +575,98 @@ export class DealsService {
 					createdById: actingUserId,
 					meta: { from: deal.stage, to: input.stage },
 				},
-			}),
-		]);
+			});
+			await emit({
+				type: "deal.stage.changed",
+				record: { kind: "deal", id: deal.id },
+				occurredAt: now,
+				data: { companyId: deal.companyId, from: deal.stage, to: input.stage },
+			});
+			if (!isClosedStage(deal.stage) && closed) {
+				await emit({
+					type: "deal.closed",
+					record: { kind: "deal", id: deal.id },
+					occurredAt: now,
+					data: {
+						companyId: deal.companyId,
+						from: deal.stage,
+						to: input.stage,
+					},
+				});
+			}
+			if (isClosedStage(deal.stage) && !closed) {
+				await emit({
+					type: "deal.opened",
+					record: { kind: "deal", id: deal.id },
+					occurredAt: now,
+					data: {
+						companyId: deal.companyId,
+						from: deal.stage,
+						to: input.stage,
+					},
+				});
+			}
 
-		await this.stamp.touch(
-			{ companyId: deal.companyId, dealId: deal.id },
-			new Date(),
-		);
+			return { changed: true as const, deal, updated, now };
+		});
+
+		if (!transition.changed) {
+			// A deal won BEFORE the engagement-type rule shipped carries no type, and
+			// a same-stage call used to be a dead end: no other endpoint accepts the
+			// field, so the obligations for every previously-won deal could never be
+			// created at all. Naming the type on an already-won deal is therefore a
+			// real operation that spawns exactly what the original win would have.
+			// Still guarded: only CLOSED_WON and only when a type is supplied.
+			const settled = transition.deal;
+			if (input.stage === "CLOSED_WON" && input.engagementType) {
+				// Deliberately fires even when the type is UNCHANGED. Naming the
+				// engagement type is what derives the contractual clocks, so restating
+				// it RECONCILES them against the deal as it stands now.
+				//
+				// Safe to repeat: ensure() is idempotent on the obligation key, so this
+				// either re-dates a row whose due date moved or does nothing at all. It
+				// never duplicates — the partial unique index would reject that anyway.
+				if (input.engagementType !== settled.engagementType) {
+					await this.db.deal.update({
+						where: { id: input.id },
+						data: { engagementType: input.engagementType },
+					});
+				}
+				let spawned: unknown = null;
+				try {
+					spawned = await this.obligations.spawnForWonDeal(
+						settled.id,
+						actingUserId,
+					);
+				} catch (err) {
+					this.logger.error({
+						message:
+							"Could not spawn obligations for a back-filled engagement type",
+						dealId: settled.id,
+						detail: err instanceof Error ? err.message : String(err),
+					});
+				}
+				this.logger.log({
+					message: "Obligations reconciled on an already-won deal",
+					dealId: settled.id,
+					engagementType: input.engagementType,
+					typeChanged: input.engagementType !== settled.engagementType,
+					spawned,
+				});
+				return {
+					id: settled.id,
+					stage: settled.stage,
+					changed: false,
+					engagementTypeSet: input.engagementType,
+					obligationsReconciled: true,
+				};
+			}
+			return { ...transition.updated, changed: false };
+		}
+
+		const { deal, updated, now } = transition;
+
+		await this.stamp.touch({ companyId: deal.companyId, dealId: deal.id }, now);
 
 		this.logger.log({
 			message: "Deal stage changed",
@@ -725,6 +872,7 @@ export class DealsService {
 		return {
 			requested: ids.length,
 			succeeded: count,
+			skipped: 0,
 			failed: ids.length - count,
 			message: null,
 		};
@@ -755,8 +903,16 @@ export class DealsService {
 		);
 	}
 
-	async bulkDelete(ids: string[]): Promise<BulkResult> {
-		return runBulk(ids, (id) => this.delete(id));
+	async bulkArchive(ids: string[]): Promise<BulkResult> {
+		return runBulk(ids, (id) => this.archive(id));
+	}
+
+	async bulkRestore(ids: string[]): Promise<BulkResult> {
+		return runBulk(ids, (id) => this.restore(id));
+	}
+
+	async bulkPurge(ids: string[]): Promise<BulkResult> {
+		return runBulk(ids, (id) => this.purge(id));
 	}
 
 	private async companyOf(dealId: string) {
@@ -784,39 +940,54 @@ export class DealsService {
 		};
 	}
 
-	private buildWhere(input: DealListInput): Prisma.DealWhereInput {
-		const where: Prisma.DealWhereInput = this.searchFilter(input.q);
+	private buildWhere(
+		input: DealListInput,
+		filterableFields: FieldDefinitionWithOptions[],
+	): Prisma.DealWhereInput {
+		const and: Prisma.DealWhereInput[] = [
+			this.searchFilter(input.q),
+			archivedFilter(input.archived),
+			...this.fields.fieldFilters(filterableFields, input.fields),
+		];
 
-		if (input.owner !== FACET_ALL) {
-			where.ownerId =
-				input.owner === FACET_UNASSIGNED ? { in: [] } : input.owner;
-		}
+		const owner = ownerFilter<Prisma.DealWhereInput>(input.owner);
+		if (owner) and.push(owner);
 
 		if (input.status === "open") {
-			where.stage = { in: [...OPEN_DEAL_STAGES] };
+			and.push({ stage: { in: [...OPEN_DEAL_STAGES] } });
 		} else if (input.status === "closed") {
-			where.stage = { in: [...CLOSED_DEAL_STAGES] };
+			and.push({ stage: { in: [...CLOSED_DEAL_STAGES] } });
 		}
 
-		if (input.stage !== FACET_ALL) {
-			where.stage = input.stage as DealStage;
+		if (input.stage.length > 0) {
+			and.push({ stage: { in: input.stage as DealStage[] } });
 		}
 
-		if (input.closing !== FACET_ALL) {
-			Object.assign(where, closingFilter(input.closing as ClosingWindow));
+		if (input.closing.length > 0) {
+			and.push({
+				OR: input.closing.map((window) =>
+					closingFilter(window as ClosingWindow),
+				),
+			});
 		}
 
-		return where;
+		return { AND: and };
 	}
 
-	private async facetCounts(input: DealListInput) {
-		const where = this.searchFilter(input.q);
+	private async facetCounts(
+		input: DealListInput,
+		filterableFields: FieldDefinitionWithOptions[],
+	) {
+		const where: Prisma.DealWhereInput = {
+			AND: [this.searchFilter(input.q), archivedFilter(input.archived)],
+		};
 
-		const [owners, stages, ...closingCounts] = await Promise.all([
+		const [owners, stages, fieldFacets, ...closingCounts] = await Promise.all([
 			this.db.deal.groupBy({ by: ["ownerId"], where, _count: { _all: true } }),
 			this.db.deal.groupBy({ by: ["stage"], where, _count: { _all: true } }),
+			this.fields.filterFacetCounts("DEAL", where, filterableFields),
 			...CLOSING_WINDOWS.map((window) =>
-				this.db.deal.count({ where: { ...where, ...closingFilter(window) } }),
+				this.db.deal.count({ where: { AND: [where, closingFilter(window)] } }),
 			),
 		]);
 
@@ -840,29 +1011,35 @@ export class DealsService {
 					closingCounts[index] ?? 0,
 				]),
 			),
+			...Object.fromEntries(
+				Object.entries(fieldFacets).map(([key, counts]) => [
+					`field:${key}`,
+					counts,
+				]),
+			),
 		};
 	}
 
-	private translate(error: unknown, id: string): unknown {
+	private translate(cause: unknown, id: string): never {
 		if (
-			error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
-			error.code === "P2025"
+			cause instanceof PrismaNamespace.PrismaClientKnownRequestError &&
+			cause.code === "P2025"
 		) {
-			return new NotFoundException(`No deal with id ${id}.`);
+			throw new NotFoundException(`No deal with id ${id}.`);
 		}
-		return this.translateRelations(error);
+		return this.translateRelations(cause);
 	}
 
-	private translateRelations(error: unknown): unknown {
+	private translateRelations(cause: unknown): never {
 		if (
-			error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
-			(error.code === "P2003" || error.code === "P2025")
+			cause instanceof PrismaNamespace.PrismaClientKnownRequestError &&
+			(cause.code === "P2003" || cause.code === "P2025")
 		) {
-			return new BadRequestException(
+			throw new BadRequestException(
 				"That company or owner does not exist any more.",
 			);
 		}
-		return error;
+		throw cause;
 	}
 }
 

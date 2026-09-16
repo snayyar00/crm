@@ -24,6 +24,7 @@ import { TableCell } from "@crm/ui/components/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AgentPanel } from "@/components/crm/agent-panel";
+import { InlineCompanyField } from "@/components/crm/company-picker";
 import { contactName } from "@/components/crm/contact-name";
 import { ContactEnrichmentAction } from "@/components/crm/enrichment-actions";
 import { EnrichmentIndicator } from "@/components/crm/enrichment-status";
@@ -38,6 +39,7 @@ import { OwnerCell } from "@/components/crm/owner-cell";
 import { ContactSocials } from "@/components/crm/social-links";
 import { DealStageMenu } from "@/components/crm/stage-change";
 import { Timeline } from "@/components/crm/timeline/timeline";
+import { WebsiteActivity } from "@/components/crm/website-activity";
 import {
 	DetailSheetBody,
 	DetailSheetEmpty,
@@ -206,6 +208,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 							record={{ kind: "contact", id: contact.id }}
 							name={contactName(contact)}
 							consequence={`Their notes, agent conversations and everything the agent found go too; emails and meetings stay filed against the company.${contact.email ? ` The sync will not bring ${contact.email} back — only adding them yourself will.` : ""}`}
+							archivedAt={contact.archivedAt}
 						/>
 					</>
 				) : null
@@ -287,7 +290,6 @@ function ContactOverview({ contact }: { contact: Contact }) {
 	const cache = useCrmCache();
 
 	const users = useQuery(trpc.users.list.queryOptions());
-	const companies = useQuery(trpc.companies.options.queryOptions({ q: "" }));
 
 	const { applied, proposed } = factsByField(contact.facts);
 
@@ -381,16 +383,11 @@ function ContactOverview({ contact }: { contact: Contact }) {
 						onSave={(githubUrl) => save({ githubUrl })}
 						{...agentProps("githubUrl")}
 					/>
-					<InlineSelectField
-						label="Company"
+					<InlineCompanyField
 						value={contact.company?.id ?? NONE}
-						options={[
-							{ value: NONE, label: "No company" },
-							...(companies.data ?? []).map((company) => ({
-								value: company.id,
-								label: company.name,
-							})),
-						]}
+						company={contact.company}
+						saving={isSaving("companyId")}
+						none={{ value: NONE, label: "No company" }}
 						onSave={(companyId) =>
 							save({ companyId: companyId === NONE ? null : companyId })
 						}
@@ -429,6 +426,8 @@ function ContactOverview({ contact }: { contact: Contact }) {
 					<ContactSocials contact={contact} />
 				</DetailSheetSection>
 			) : null}
+
+			<WebsiteActivity contactId={contact.id} />
 		</DetailSheetBody>
 	);
 }

@@ -2,6 +2,7 @@ import { db, EnrichmentStatus } from "@crm/db";
 import { mirrorBrandImages } from "./brand-images";
 import { brandToUpdate, filledFields, stillFillable } from "./brand-mapping";
 import { brandByDomain, contextDevEnabled } from "./context-dev";
+import { UNLESS_COMPLETE } from "./enrichment";
 
 export type BrandResult = {
 	enriched: boolean;
@@ -65,15 +66,20 @@ export async function runBrand({
 	}
 
 	if (!company.domain) {
-		await settle(companyId, EnrichmentStatus.SKIPPED, "No domain to look up.");
+		await settle(
+			companyId,
+			EnrichmentStatus.SKIPPED,
+			"No domain to look up.",
+			UNLESS_COMPLETE,
+		);
 		return { enriched: false, reason: "No domain on this company." };
 	}
 
 	const charge = spend(2);
 	if (!charge.ok) return { enriched: false, reason: charge.reason };
 
-	await db.company.update({
-		where: { id: companyId },
+	await db.company.updateMany({
+		where: { id: companyId, ...UNLESS_COMPLETE },
 		data: {
 			enrichmentStatus: EnrichmentStatus.RUNNING,
 			enrichmentError: null,
@@ -157,13 +163,18 @@ export function brandOutcome(result: BrandResult): string {
 	return `Filled ${filled.join(", ")}.${mirrored.length > 0 ? ` Copied ${mirrored.length} image(s) in-house.` : ""}`;
 }
 
+type SettleGuard =
+	| typeof UNLESS_COMPLETE
+	| { enrichmentStatus: EnrichmentStatus };
+
 async function settle(
 	companyId: string,
 	status: EnrichmentStatus,
 	error: string,
+	guard: SettleGuard = { enrichmentStatus: EnrichmentStatus.RUNNING },
 ): Promise<void> {
-	await db.company.update({
-		where: { id: companyId },
+	await db.company.updateMany({
+		where: { id: companyId, ...guard },
 		data: { enrichmentStatus: status, enrichmentError: error },
 	});
 }

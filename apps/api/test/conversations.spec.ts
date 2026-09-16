@@ -2,12 +2,19 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { DEFAULT_WORKSPACE_NAME, WORKSPACE_ID } from "@crm/auth";
 import { db } from "@crm/db";
 import { workspaceSlug } from "@crm/db/workspace";
+import { z } from "zod";
 import {
 	builderConversationCreateInput,
 	conversationListInput,
 	conversationSaveInput,
 } from "../src/conversations/conversations.contracts";
 import { ConversationsService } from "../src/conversations/conversations.service";
+
+const record = z.record(z.string(), z.unknown()).catch({});
+
+const list = z.array(z.unknown()).catch([]);
+
+const text = z.string().nullable().catch(null);
 
 const suffix = process.env.TEST_RUN_ID ?? "conversations-spec";
 const email = `conversation.subject.${suffix}@example.test`;
@@ -285,6 +292,51 @@ describe("ConversationsService", () => {
 		).toEqual(["event.2", "event.3"]);
 	});
 
+	it("returns builder events from descendant sessions", async () => {
+		const builder = await service.createBuilder(
+			{
+				clientRequestId: crypto.randomUUID(),
+				commandType: "CREATE_AGENT",
+				message: "Build an agent that asks one question",
+				resources: [],
+				attachments: [],
+			},
+			userId,
+		);
+		const rootSessionId = `builder-question-${suffix}-root`;
+		await db.agentConversation.update({
+			where: { id: builder.id },
+			data: { sessionId: rootSessionId },
+		});
+		const emittedAt = new Date("2026-08-05T13:00:00.000Z");
+		await db.agentEvent.createMany({
+			data: [
+				{
+					id: `evt_${suffix}_builder_root`,
+					sessionId: rootSessionId,
+					conversationId: builder.id,
+					type: "actions.requested",
+					data: {},
+					emittedAt,
+				},
+				{
+					id: `evt_${suffix}_builder_child`,
+					sessionId: `builder-question-${suffix}-child`,
+					conversationId: builder.id,
+					type: "input.requested",
+					data: {},
+					emittedAt: new Date(emittedAt.getTime() + 1),
+				},
+			],
+		});
+
+		expect(
+			(await service.events({ id: builder.id, limit: 10 }, userId)).map(
+				(event) => event.type,
+			),
+		).toEqual(["actions.requested", "input.requested"]);
+	});
+
 	it("forgets a conversation and the events behind it", async () => {
 		const sessionId = `ses_${suffix}_delete`;
 		const conversation = await service.save({ contactId, sessionId }, userId);
@@ -404,8 +456,10 @@ describe("ConversationsService", () => {
 		const submission = detail.submissions.find(
 			(row) => row.clientRequestId === input.clientRequestId,
 		);
-		const message = recordOf(submission?.message);
-		const attachments = arrayOf(message.attachments).map(recordOf);
+		const message = record.parse(submission?.message);
+		const attachments = list
+			.parse(message.attachments)
+			.map((entry) => record.parse(entry));
 
 		expect(JSON.stringify(message)).not.toContain("contentBase64");
 		expect(attachments).toEqual([
@@ -422,8 +476,8 @@ describe("ConversationsService", () => {
 				previewUrl: null,
 			}),
 		]);
-		const imageId = attachments[0]?.id;
-		if (typeof imageId !== "string") throw new Error("Missing attachment id");
+		const imageId = text.parse(attachments[0]?.id);
+		if (imageId === null) throw new Error("Missing attachment id");
 		const image = await service.attachment(imageId, userId);
 		expect(Buffer.from(image.content)).toEqual(imageBytes);
 		expect(image).toMatchObject({
@@ -470,9 +524,9 @@ describe("ConversationsService", () => {
 			userId,
 		);
 		const original = await service.builderById(conversation.id, userId);
-		const originalMessage = recordOf(original.submissions[0]?.message);
-		const originalAttachment = recordOf(
-			arrayOf(originalMessage.attachments)[0],
+		const originalMessage = record.parse(original.submissions[0]?.message);
+		const originalAttachment = record.parse(
+			list.parse(originalMessage.attachments)[0],
 		);
 
 		await service.submitBuilder(
@@ -496,8 +550,10 @@ describe("ConversationsService", () => {
 		);
 
 		const detail = await service.builderById(conversation.id, userId);
-		const retryMessage = recordOf(detail.submissions.at(-1)?.message);
-		const retryAttachment = recordOf(arrayOf(retryMessage.attachments)[0]);
+		const retryMessage = record.parse(detail.submissions.at(-1)?.message);
+		const retryAttachment = record.parse(
+			list.parse(retryMessage.attachments)[0],
+		);
 		expect(retryAttachment.id).not.toBe(originalAttachment.id);
 		const stored = await service.attachment(String(retryAttachment.id), userId);
 		expect(Buffer.from(stored.content)).toEqual(bytes);
@@ -533,8 +589,8 @@ describe("ConversationsService", () => {
 			userId,
 		);
 		const sourceDetail = await service.builderById(source.id, userId);
-		const sourceMessage = recordOf(sourceDetail.submissions[0]?.message);
-		const attachment = recordOf(arrayOf(sourceMessage.attachments)[0]);
+		const sourceMessage = record.parse(sourceDetail.submissions[0]?.message);
+		const attachment = record.parse(list.parse(sourceMessage.attachments)[0]);
 
 		let submitError: unknown;
 		try {
@@ -642,26 +698,21 @@ describe("ConversationsService", () => {
 			data: {
 				sessionId,
 				continuationToken: `crm:builder:${conversation.id}`,
+				pendingInputRequest: {
+					kind: "question",
+					requestId: "question-1",
+					prompt: "Where should this go?",
+					display: "select",
+					options: [{ id: "crm-task", label: "Create a CRM task" }],
+				},
 			},
 		});
-		await db.agentEvent.create({
-			data: {
-				id: `evt_${suffix}_question`,
-				sessionId,
-				type: "input.requested",
-				data: {
-					requests: [
-						{
-							kind: "question",
-							requestId: "question-1",
-							prompt: "Where should this go?",
-							display: "select",
-							options: [{ id: "crm-task", label: "Create a CRM task" }],
-						},
-					],
-				},
-				emittedAt: new Date(),
-			},
+
+		expect(
+			(await service.builderById(conversation.id, userId)).pendingQuestion,
+		).toMatchObject({
+			requestId: "question-1",
+			prompt: "Where should this go?",
 		});
 
 		const response = await service.answerBuilderQuestion(
@@ -684,17 +735,55 @@ describe("ConversationsService", () => {
 		});
 
 		expect(submission).toMatchObject({
-			commandType: "CHAT",
+			commandType: "CREATE_AGENT",
 			inputRequestId: "question-1",
 			status: "PENDING",
 			message: {
 				text: "Create a CRM task",
 				inputResponse: {
 					requestId: "question-1",
-					answer: "crm-task",
+					optionId: "crm-task",
 				},
 			},
 		});
+	});
+
+	it("rejects an answer when the conversation has no durable question", async () => {
+		const conversation = await service.createBuilder(
+			{
+				clientRequestId: crypto.randomUUID(),
+				commandType: "CREATE_AGENT",
+				message: "/Create agent Notify the team",
+				resources: [],
+				attachments: [],
+			},
+			userId,
+		);
+		await db.agentConversation.update({
+			where: { id: conversation.id },
+			data: {
+				sessionId: `builder-question-${suffix}-recovery`,
+				continuationToken: `builder:${conversation.id}`,
+			},
+		});
+
+		let error: Error | null = null;
+		try {
+			await service.answerBuilderQuestion(
+				{
+					id: conversation.id,
+					clientRequestId: crypto.randomUUID(),
+					requestId: "question-only-in-eve",
+					optionId: "continue-building",
+				},
+				userId,
+			);
+		} catch (caught) {
+			error = caught as Error;
+		}
+		expect(error?.message).toBe(
+			"The agent is no longer waiting for that answer.",
+		);
 	});
 
 	it("accepts only one concurrent answer to a follow-up request", async () => {
@@ -714,28 +803,16 @@ describe("ConversationsService", () => {
 			data: {
 				sessionId,
 				continuationToken: `crm:builder:${conversation.id}`,
-			},
-		});
-		await db.agentEvent.create({
-			data: {
-				id: `evt_${suffix}_concurrent_question`,
-				sessionId,
-				type: "input.requested",
-				data: {
-					requests: [
-						{
-							kind: "question",
-							requestId: "question-concurrent",
-							prompt: "Which output?",
-							display: "select",
-							options: [
-								{ id: "note", label: "Create a note" },
-								{ id: "task", label: "Create a task" },
-							],
-						},
+				pendingInputRequest: {
+					kind: "question",
+					requestId: "question-concurrent",
+					prompt: "Which output?",
+					display: "select",
+					options: [
+						{ id: "note", label: "Create a note" },
+						{ id: "task", label: "Create a task" },
 					],
 				},
-				emittedAt: new Date(),
 			},
 		});
 
@@ -776,13 +853,3 @@ describe("ConversationsService", () => {
 		).toBe(1);
 	});
 });
-
-function recordOf(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function arrayOf(value: unknown): unknown[] {
-	return Array.isArray(value) ? value : [];
-}

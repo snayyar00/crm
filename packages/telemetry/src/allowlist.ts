@@ -9,7 +9,6 @@ export const ALLOWED_PROPERTIES = [
 	"postgres_version",
 	"seed_only",
 
-	"cap_rapidapi",
 	"cap_perplexity",
 	"cap_context_dev",
 	"cap_blob",
@@ -20,6 +19,7 @@ export const ALLOWED_PROPERTIES = [
 	"cap_ai_gateway",
 	"cap_google_oauth",
 	"cap_sso_provider",
+	"cap_tracking",
 	"is_marketing",
 	"agent_model_id",
 	"agent_model_context_window",
@@ -66,6 +66,12 @@ export const ALLOWED_PROPERTIES = [
 	"enrichment_by_status",
 	"suppressed_domains",
 	"suppressed_contacts",
+	"tracking_domains",
+	"tracking_page_views",
+	"tracking_forms",
+	"tracking_contacts_created",
+	"tracking_capped",
+	"tracking_paused",
 	"workspace_profile_written",
 
 	"error_class",
@@ -91,10 +97,12 @@ export type PropertyValue =
 
 export type Properties = Partial<Record<AllowedProperty, PropertyValue>>;
 
+export type PermittedProperties = Record<string, PropertyValue>;
+
 export function permitted(
 	properties: Record<string, unknown>,
-): Record<string, PropertyValue> {
-	const kept: Record<string, PropertyValue> = {};
+): PermittedProperties {
+	const kept: PermittedProperties = {};
 
 	for (const [name, value] of Object.entries(properties)) {
 		if (!ALLOWED.has(name)) continue;
@@ -232,11 +240,11 @@ export function permittedSyncSource(source: string | null | undefined): string {
 
 const MAILBOX_SYNC = "mailbox_sync";
 
-const SYNC_ERROR_SOURCES: Record<TelemetrySyncSource, string> = {
+const SYNC_ERROR_SOURCES = {
 	gmail: "google_sync",
 	calendar: "google_sync",
 	outlook: "microsoft_sync",
-};
+} as const satisfies Record<TelemetrySyncSource, string>;
 
 export function permittedSyncErrorSource(
 	source: string | null | undefined,

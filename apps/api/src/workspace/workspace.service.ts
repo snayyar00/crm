@@ -5,6 +5,7 @@ import {
 	isWorkspaceRole,
 	WORKSPACE_ID,
 	type WorkspaceRole,
+	workspaceRoleOf,
 } from "@crm/auth";
 import type { Db, Prisma } from "@crm/db";
 import { isOnboarded, markOnboarded, workspaceSlug } from "@crm/db/workspace";
@@ -21,8 +22,8 @@ import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	countsByKey,
-	FACET_ALL,
 	type ListResult,
+	type OrderByColumns,
 	paginate,
 	resolveOrderBy,
 } from "../trpc/list-input";
@@ -30,29 +31,9 @@ import type {
 	MemberListInput,
 	SetMemberRoleInput,
 	UpdateWorkspaceInput,
+	Workspace,
+	WorkspaceMember,
 } from "./workspace.contracts";
-
-export interface Workspace {
-	id: string;
-	slug: string;
-	name: string;
-	website: string | null;
-	onboarded: boolean;
-	viewerRole: WorkspaceRole | null;
-	canRename: boolean;
-	canChangeRoles: boolean;
-}
-
-export interface WorkspaceMember {
-	id: string;
-	userId: string;
-	name: string;
-	email: string;
-	image: string | null;
-	role: WorkspaceRole;
-	joinedAt: string;
-	isViewer: boolean;
-}
 
 const MEMBER_SELECT = {
 	id: true,
@@ -64,10 +45,7 @@ const MEMBER_SELECT = {
 
 type MemberRow = Prisma.MemberGetPayload<{ select: typeof MEMBER_SELECT }>;
 
-const SORTABLE: Record<
-	string,
-	(dir: Prisma.SortOrder) => Prisma.MemberOrderByWithRelationInput
-> = {
+const SORTABLE: OrderByColumns<Prisma.MemberOrderByWithRelationInput> = {
 	name: (dir) => ({ user: { name: dir } }),
 	email: (dir) => ({ user: { email: dir } }),
 	role: (dir) => ({ role: dir }),
@@ -101,7 +79,7 @@ export class WorkspaceService {
 			);
 		}
 
-		const role = await this.roleOf(userId);
+		const role = await workspaceRoleOf(userId);
 
 		return {
 			id: row.id,
@@ -119,7 +97,7 @@ export class WorkspaceService {
 		userId: string,
 		input: UpdateWorkspaceInput,
 	): Promise<Workspace> {
-		const role = await this.roleOf(userId);
+		const role = await workspaceRoleOf(userId);
 
 		if (!canRenameWorkspace(role)) {
 			throw new ForbiddenException(
@@ -198,7 +176,7 @@ export class WorkspaceService {
 		userId: string,
 		input: SetMemberRoleInput,
 	): Promise<WorkspaceMember> {
-		const role = await this.roleOf(userId);
+		const role = await workspaceRoleOf(userId);
 
 		if (!canChangeRole(role)) {
 			throw new ForbiddenException(
@@ -279,8 +257,8 @@ export class WorkspaceService {
 	private buildWhere(input: MemberListInput): Prisma.MemberWhereInput {
 		const where = this.searchWhere(input.q);
 
-		if (input.role !== FACET_ALL) {
-			where.role = input.role;
+		if (input.role.length > 0) {
+			where.role = { in: input.role };
 		}
 
 		return where;
@@ -297,16 +275,5 @@ export class WorkspaceService {
 				metadata: true,
 			},
 		});
-	}
-
-	private async roleOf(userId: string): Promise<WorkspaceRole | null> {
-		const member = await this.db.member.findUnique({
-			where: {
-				organizationId_userId: { organizationId: WORKSPACE_ID, userId },
-			},
-			select: { role: true },
-		});
-
-		return member ? toRole(member.role) : null;
 	}
 }

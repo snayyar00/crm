@@ -55,6 +55,7 @@ import {
 	BRIEF_LABEL,
 	CANCEL,
 	FILL_REST,
+	filterPlacement,
 	KEY_HELP,
 	KEY_LABEL,
 	LABEL_LABEL,
@@ -67,11 +68,11 @@ import {
 } from "./fields-copy";
 import { type FieldEntity, kindOf } from "./fields-entity";
 
-const COVERAGE_NOUN: Record<FieldEntity, string> = {
+const COVERAGE_NOUN = {
 	COMPANY: "companies",
 	CONTACT: "contacts",
 	DEAL: "deals",
-};
+} satisfies Record<FieldEntity, string>;
 
 type FieldRecord = RouterOutputs["fields"]["list"][number];
 
@@ -83,9 +84,10 @@ type Draft = {
 	agentBrief: string;
 	showOnSheet: boolean;
 	showOnTable: boolean;
+	showOnFilter: boolean;
 };
 
-const TYPE_HINTS: Record<string, string> = {
+const TYPE_HINTS = {
 	TEXT: "Text — a short line",
 	LONG_TEXT: "Long text — a paragraph",
 	NUMBER: "Number",
@@ -96,7 +98,7 @@ const TYPE_HINTS: Record<string, string> = {
 	EMAIL: "Email",
 	PHONE: "Phone",
 	USER: "User — someone in the workspace",
-};
+} satisfies Record<(typeof FIELD_TYPES)[number], string>;
 
 function optionId(option: { id?: string }, index: number): string {
 	return option.id ?? `draft-${index}`;
@@ -117,6 +119,7 @@ function draftFrom(field: FieldRecord | undefined): Draft {
 		agentBrief: field?.agentBrief ?? "",
 		showOnSheet: field?.showOnSheet ?? true,
 		showOnTable: field?.showOnTable ?? false,
+		showOnFilter: field?.showOnFilter ?? false,
 	};
 }
 
@@ -220,6 +223,7 @@ export function FieldEditor({
 
 	const key = field?.key ?? fieldKeyFromLabel(draft.label);
 	const saving = create.isPending || update.isPending;
+	const filterable = draft.type === "SELECT" || draft.type === "USER";
 
 	const save = () => {
 		const payload = {
@@ -230,6 +234,7 @@ export function FieldEditor({
 			agentBrief: draft.agentBrief.trim() || null,
 			showOnSheet: draft.showOnSheet,
 			showOnTable: draft.showOnTable,
+			showOnFilter: filterable && draft.showOnFilter,
 		};
 
 		if (field) {
@@ -402,6 +407,17 @@ export function FieldEditor({
 						/>
 						{tablePlacement(entity)}
 					</FieldLabel>
+					{filterable ? (
+						<FieldLabel className="items-center gap-2 font-normal">
+							<Checkbox
+								checked={draft.showOnFilter}
+								onCheckedChange={(checked) =>
+									patch({ showOnFilter: checked === true })
+								}
+							/>
+							{filterPlacement(entity)}
+						</FieldLabel>
+					) : null}
 				</div>
 			</div>
 

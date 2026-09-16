@@ -1,5 +1,192 @@
 # Changelog
 
+## [1.15.3](https://github.com/trycompai/crm/compare/v1.15.2...v1.15.3) (2026-08-21)
+
+
+### Fixes
+
+* **app:** prevent url param collision between fields sheet and table filter ([#175](https://github.com/trycompai/crm/issues/175)) ([1cebe1e](https://github.com/trycompai/crm/commit/1cebe1e5b3087007c4eac8b18add38ff9e8dd69b))
+* stop a finished enrichment reading as failed ([#173](https://github.com/trycompai/crm/issues/173)) ([2946580](https://github.com/trycompai/crm/commit/2946580afdd43419ce08165a0d55ba9d084c554e))
+
+## [1.15.2](https://github.com/trycompai/crm/compare/v1.15.1...v1.15.2) (2026-08-20)
+
+
+### Documentation
+
+* **api:** explain runtime openapi document and vendoring rules ([#170](https://github.com/trycompai/crm/issues/170)) ([630f2c9](https://github.com/trycompai/crm/commit/630f2c9f375b5ae084ed708d21bcdb563c774a4f))
+
+## [1.15.1](https://github.com/trycompai/crm/compare/v1.15.0...v1.15.1) (2026-08-20)
+
+
+### Fixes
+
+* **api:** serve openapi.json and bundle swagger deps in function build ([#166](https://github.com/trycompai/crm/issues/166)) ([7ea4f37](https://github.com/trycompai/crm/commit/7ea4f37cd65e93d62d3977e08a0df476b3aa4479))
+
+## [1.15.0](https://github.com/trycompai/crm/compare/v1.14.0...v1.15.0) (2026-08-20)
+
+
+### Features
+
+* **agent:** scope field backfill tasks to records missing values ([#163](https://github.com/trycompai/crm/issues/163)) ([3be7bbd](https://github.com/trycompai/crm/commit/3be7bbd69fe8b814ee2599a29b33e73f02a66245))
+
+## [1.14.0](https://github.com/trycompai/crm/compare/v1.13.0...v1.14.0) (2026-08-18)
+
+
+### Features
+
+* **agent:** read people from Context.dev instead of RapidAPI (CMP-86) ([#158](https://github.com/trycompai/crm/issues/158)) ([7b9288b](https://github.com/trycompai/crm/commit/7b9288b024f870fe5cb48b642255ebca645c261b))
+* enrichment queue widget (CMP-92) ([#159](https://github.com/trycompai/crm/issues/159)) ([5e11482](https://github.com/trycompai/crm/commit/5e11482bee237d94a6eca8dfecbe6e7850df9c7a))
+* page the enrichment queue (CMP-92) ([#160](https://github.com/trycompai/crm/issues/160)) ([8c1abb1](https://github.com/trycompai/crm/commit/8c1abb14f4a60e0f9232914958869acccd610f71))
+
+
+### Fixes
+
+* unblock the test suite and actually install the git hooks (CMP-83) ([#152](https://github.com/trycompai/crm/issues/152)) ([652135b](https://github.com/trycompai/crm/commit/652135be27e9c3e22c06e4d6cfb47746f5c6c9c1))
+
+
+### Refactors
+
+* clear anti-slop type assertions and conditional object spreads (CMP-81) ([#146](https://github.com/trycompai/crm/issues/146)) ([bfd4dad](https://github.com/trycompai/crm/commit/bfd4dadfd1df44566676902a2477bfa112ca1413))
+* parse every remaining I/O boundary into a domain type (CMP-82) ([#151](https://github.com/trycompai/crm/issues/151)) ([3fb9922](https://github.com/trycompai/crm/commit/3fb9922b63aae5e97518d6712037e70b21899a76))
+
+
+### Documentation
+
+* propose an i18n layer ([#143](https://github.com/trycompai/crm/issues/143)) ([64440c6](https://github.com/trycompai/crm/commit/64440c6827394af69659a1d0205574a6726868a8))
+
+## [1.13.0](https://github.com/trycompai/crm/compare/v1.12.0...v1.13.0) (2026-08-12)
+
+
+### Features
+
+* **app:** search company dropdowns instead of scrolling them ([#125](https://github.com/trycompai/crm/issues/125)) ([3b558a8](https://github.com/trycompai/crm/commit/3b558a82155d556aa4ff2860121ddf314e2ae88c))
+
+
+### Fixes
+
+* **agent:** let the assistant chat read the deal list it is told to use (CMP-77) ([#139](https://github.com/trycompai/crm/issues/139)) ([e86a0fb](https://github.com/trycompai/crm/commit/e86a0fbe4076ec3ead43f9ab24c3ac805070819a))
+* **app:** show select field values in record tables ([#133](https://github.com/trycompai/crm/issues/133)) ([1d89b43](https://github.com/trycompai/crm/commit/1d89b43e2d0ad376970be09f9446f1903203ec09))
+
+## [1.12.0](https://github.com/trycompai/crm/compare/v1.11.0...v1.12.0) (2026-08-11)
+
+
+### Features
+
+* edit a deployed agent, and show what Slack actually granted (CMP-77) ([#109](https://github.com/trycompai/crm/issues/109)) ([76b443a](https://github.com/trycompai/crm/commit/76b443ae4fe2567c5c5e51465a82db5faa1f3e62))
+
+## [1.11.0](https://github.com/trycompai/crm/compare/v1.10.0...v1.11.0) (2026-08-11)
+
+
+### Features
+
+* **app:** copy the tracking snippet for the selected install method ([#128](https://github.com/trycompai/crm/issues/128)) ([30e0137](https://github.com/trycompai/crm/commit/30e01377781559375c3a58ada50b63016dea7d57))
+
+## [1.10.0](https://github.com/trycompai/crm/compare/v1.9.0...v1.10.0) (2026-08-11)
+
+
+### Features
+
+* **tracking:** support installing the tracking tag via Google Tag Manager ([#124](https://github.com/trycompai/crm/issues/124)) ([2d8129c](https://github.com/trycompai/crm/commit/2d8129ccdd75ca2630289f4bf0cacd04505150b3))
+
+## [1.9.0](https://github.com/trycompai/crm/compare/v1.8.2...v1.9.0) (2026-08-11)
+
+
+### Features
+
+* **agent:** stop suggesting a URL that already matches the field ([#120](https://github.com/trycompai/crm/issues/120)) ([ed43055](https://github.com/trycompai/crm/commit/ed43055be2885a2de29f16374b07b3e077cace22))
+
+## [1.8.2](https://github.com/trycompai/crm/compare/v1.8.1...v1.8.2) (2026-08-11)
+
+
+### Fixes
+
+* **agent:** fill blank fields on the dispatch tick instead of sign-in ([#117](https://github.com/trycompai/crm/issues/117)) ([9660952](https://github.com/trycompai/crm/commit/96609529f9f7be27441a88267a05e9a6c8f9c23c))
+
+## [1.8.1](https://github.com/trycompai/crm/compare/v1.8.0...v1.8.1) (2026-08-11)
+
+
+### Fixes
+
+* **ci:** ship releases by opening a pull request into release ([#114](https://github.com/trycompai/crm/issues/114)) ([924060b](https://github.com/trycompai/crm/commit/924060bac114d7fba6681c6b1b2f38de19f36440))
+
+## [1.8.0](https://github.com/trycompai/crm/compare/v1.7.0...v1.8.0) (2026-08-11)
+
+
+### Features
+
+* **agent:** apply sourced facts to empty fields automatically ([#112](https://github.com/trycompai/crm/issues/112)) ([0342c8e](https://github.com/trycompai/crm/commit/0342c8ee62561c8df1db16644c2b049617c908a0))
+
+## [1.7.0](https://github.com/trycompai/crm/compare/v1.6.1...v1.7.0) (2026-08-11)
+
+
+### Features
+
+* **db:** add peek script for inspecting database contents ([#110](https://github.com/trycompai/crm/issues/110)) ([acae8ec](https://github.com/trycompai/crm/commit/acae8ec1ab29851ec66a8a1e8e89672bef6e7eca))
+
+## [1.6.1](https://github.com/trycompai/crm/compare/v1.6.0...v1.6.1) (2026-08-11)
+
+
+### Fixes
+
+* **ci:** fall back to the pushed commit when release-please reports no sha ([d1efd97](https://github.com/trycompai/crm/commit/d1efd9730570730fc569d124f2c74559d47fe790))
+* **ci:** make a release one pull request instead of two ([206c746](https://github.com/trycompai/crm/commit/206c7461e75ee4827960ec07a02843d107514f20))
+
+## [1.6.0](https://github.com/trycompai/crm/compare/v1.5.1...v1.6.0) (2026-08-11)
+
+
+### Features
+
+* **tracking:** add website tracking with form capture and attribution ([e050ff9](https://github.com/trycompai/crm/commit/e050ff9cd62897880da6cceebe765d51aef8f723))
+
+
+### Fixes
+
+* **ci:** make the release guard reject only genuinely untagged pull requests ([#105](https://github.com/trycompai/crm/issues/105)) ([815a832](https://github.com/trycompai/crm/commit/815a832fbefe4c96ad15cee1679be116e590e132))
+* **ci:** stop the auto-titler downgrading a release ([8a1e390](https://github.com/trycompai/crm/commit/8a1e3901ec5e6eeca13b0b0af4c3edbc0e57736d))
+
+## [1.5.1](https://github.com/trycompai/crm/compare/v1.5.0...v1.5.1) (2026-08-08)
+
+
+### Fixes
+
+* **api:** warn when the deployed schema does not match schema.prisma ([#88](https://github.com/trycompai/crm/issues/88)) ([f445c68](https://github.com/trycompai/crm/commit/f445c68a815ad1635498591daa494d18d9508ccf))
+
+## [1.5.0](https://github.com/trycompai/crm/compare/v1.4.0...v1.5.0) (2026-08-08)
+
+
+### Features
+
+* **agent:** bound agent builder retries and improve chat scrolling ([#89](https://github.com/trycompai/crm/issues/89)) ([7780f81](https://github.com/trycompai/crm/commit/7780f81a219813fcf54e6b5dd612a7d40e31d32b))
+
+
+### Fixes
+
+* **agent:** declare granted write actions in draft access summary ([#93](https://github.com/trycompai/crm/issues/93)) ([ad4f9f3](https://github.com/trycompai/crm/commit/ad4f9f31c81fd6bdad89abb6adb5a208d51c19ed))
+* **app:** render agent transcript chronologically with anchored tool results ([#92](https://github.com/trycompai/crm/issues/92)) ([0e68e45](https://github.com/trycompai/crm/commit/0e68e45909182c875ea58ba18fb89d9a87032e11))
+
+## [1.4.0](https://github.com/trycompai/crm/compare/v1.3.0...v1.4.0) (2026-08-07)
+
+
+### Features
+
+* **agent:** CMP-1 add sandboxed builder and runner runtimes ([#60](https://github.com/trycompai/crm/issues/60)) ([d033dbf](https://github.com/trycompai/crm/commit/d033dbf0a0bc966499454a402219b65130b6397a))
+* **app:** CMP-12 review agent drafts before deployment ([#63](https://github.com/trycompai/crm/issues/63)) ([51a4a11](https://github.com/trycompai/crm/commit/51a4a118432863980c88dc0f7c0d9e56aa4462ae))
+* **app:** CMP-46 add the private agent builder workspace ([#62](https://github.com/trycompai/crm/issues/62)) ([f64c88f](https://github.com/trycompai/crm/commit/f64c88fe9d3e1a72e67e630f01817f75cfddaedd))
+* **app:** CMP-47 add inline composer context ([57336ab](https://github.com/trycompai/crm/commit/57336abc2cc5d599aa1467bae0345482ac3de1d5))
+* **db:** CMP-1 persist durable custom agents ([#67](https://github.com/trycompai/crm/issues/67)) ([4e79f83](https://github.com/trycompai/crm/commit/4e79f837dba6654806a1d3f99632ec34343a2b6d))
+
+
+### Fixes
+
+* **app:** CMP-47 consolidate agent builder presentation ([#64](https://github.com/trycompai/crm/issues/64)) ([1809d27](https://github.com/trycompai/crm/commit/1809d277c31f64b2ea3dd44615175b47bcbbda34))
+* **app:** move chat beneath overview in icon rail ([#83](https://github.com/trycompai/crm/issues/83)) ([b63497d](https://github.com/trycompai/crm/commit/b63497d07c5c33d119b9d759c81341e422afd8cd))
+* **ci:** tag releases automatically and keep previews off the production schema ([#82](https://github.com/trycompai/crm/issues/82)) ([6078a84](https://github.com/trycompai/crm/commit/6078a84b4fa435914f77601dc2c6e67c28de4bc3))
+
+
+### Refactors
+
+* **app:** CMP-59 harden CRM UI foundations ([#61](https://github.com/trycompai/crm/issues/61)) ([d8123e6](https://github.com/trycompai/crm/commit/d8123e6dd6a02986d0a9211c68dfaa110cdc0901))
+
 ## [1.3.0](https://github.com/trycompai/crm/compare/v1.2.0...v1.3.0) (2026-08-07)
 
 

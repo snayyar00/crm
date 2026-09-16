@@ -98,6 +98,43 @@ the live database. On 2026-08-01 eleven migrations landed on Neon from a laptop.
    auto-loads the working directory's `.env` while Prisma's CLI only sees
    `@crm/env/load`.
 
+## Migrations run on the production deploy, and nowhere else
+
+`apps/api/scripts/build-func.mjs` runs `prisma migrate deploy` during the crm-api
+build, gated on `VERCEL_ENV === "production"`. The schema therefore moves when the
+release pull request merges and `release` deploys — with the code that needs it,
+and once rather than once per branch.
+
+Preview deploys share the production database: `DATABASE_URL` is a single value
+across production, preview and development. Until that changes, **a preview of a
+branch that adds a migration runs against a database without those tables** — it
+builds, and the pages that touch them fail. Test schema changes locally, where
+`bun run dev` migrates for you. Before the gate existed the reverse was true and
+worse: every preview applied its own migrations to the production database, so on
+2026-08-07 the live schema ran six migrations ahead of the live code all day.
+
+### `migrate deploy` is not proof the schema is right
+
+The build follows the deploy with `prisma migrate diff --exit-code` against
+`schema.prisma` and shouts in the build log when they disagree. **`No pending
+migrations to apply` only means `_prisma_migrations` has a row for every file** —
+it says nothing about what the tables actually look like.
+
+They came apart once. A `prisma db push` shaped production from a laptop, the
+migration rows were recorded as applied without their SQL ever running, and
+`agentConversationAttachment` went live without its `position` column. Every deploy
+reported nothing pending, for days, while `conversations.builderById` returned 500.
+The tell is an object in the database that no migration defines — there was an
+`agentConversationAttachment_submissionId_createdAt_idx` that appears in no
+migration file, only in a `db push` of an older schema.
+
+Reconciling is one command, and it is worth reading before running:
+
+```sh
+DATABASE_URL="…" bunx prisma migrate diff \
+  --from-config-datasource --to-schema prisma/schema.prisma --script
+```
+
 ## Secrets hygiene
 
 `.gitignore` ignores `.env` and `.env.*` with one negation for `.env.example`, so
@@ -111,3 +148,30 @@ never reuse one from an example, a tutorial, or another environment.
 bun run --filter=api test
 bun run --filter=agent test    # integration specs need DATABASE_URL + real Postgres
 ```
+
+### The test database rebuilds itself when it drifts
+
+`bun run db:test` creates `crm_test` and runs `migrate deploy` on it. The database
+name must end in `_test`; the suite deletes rows it expects to put back, so it
+refuses anything else.
+
+**`migrate deploy` only applies migrations that are missing. It never removes a
+table, a column or a constraint the database has and the schema does not.** A
+`crm_test` built on a branch that was later abandoned therefore keeps that branch's
+objects forever, and `db:test` used to report `already exists` and move on. The
+extra objects are invisible until one of them rejects a write, and then the failure
+names a constraint that appears in no migration and in no schema — a stray
+`trackedEvent_visitorId_fkey` once failed seven tracking specs this way, on every
+branch, for as long as the database survived.
+
+So `db:test` now checks the database it found and rebuilds it when either is true:
+
+- **It holds a migration this branch does not have.** The database came from
+  another branch. The name of the first one is printed.
+- **It no longer matches `schema.prisma`**, by `prisma migrate diff`. Something
+  was pushed or altered by hand.
+
+A rebuild drops the database and re-runs every migration, and it says which of the
+two reasons fired. Force one with `bun run db:test --reset`. Nothing else in the
+repo may drop a database, and this may only because the `_test` suffix is checked
+first.
