@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { bufferedProxyResponse } from "@/lib/api-proxy-response";
+import { hostOnlyClearances } from "@/lib/auth-cookie-clearance";
 import { API_URL } from "@/lib/env";
 
 async function handler(request: Request): Promise<Response> {
@@ -65,6 +66,9 @@ async function handler(request: Request): Promise<Response> {
 	if (setCookies.length > 0) {
 		responseHeaders.delete("set-cookie");
 		for (const cookie of setCookies) {
+			responseHeaders.append("set-cookie", cookie);
+		}
+		for (const cookie of hostOnlyClearances(setCookies)) {
 			responseHeaders.append("set-cookie", cookie);
 		}
 	}
