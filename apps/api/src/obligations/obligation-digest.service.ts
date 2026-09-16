@@ -144,7 +144,11 @@ export class ObligationDigestService {
 
 		const obligations = rows.filter(
 			(r) =>
-				Boolean(this.kindOf(r)) &&
+				// Every open task counts, not only keyed obligations. Requiring a
+				// kind here made the alarm blind to 14 of the 20 tasks actually
+				// open — every hand-typed follow-up, every "approve and send" —
+				// so it reported "clean" on a morning with five things due that
+				// day. An unkeyed row gets DEFAULT_LEAD_DAYS via leadDaysFor().
 				this.slack(r) <= 0 &&
 				// Never alarm about an audit deliverable whose work has not started.
 				// Its date is a placeholder until the customer returns what we asked
