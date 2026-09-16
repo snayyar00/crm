@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import {
 	PageShell,
 	PageShellContent,
@@ -26,7 +27,9 @@ export default function ImportCompaniesPage() {
 				</PageShellHeading>
 			</PageShellHeader>
 			<PageShellContent>
-				<ImportWizard />
+				<Suspense fallback={null}>
+					<ImportWizard />
+				</Suspense>
 			</PageShellContent>
 		</PageShell>
 	);
