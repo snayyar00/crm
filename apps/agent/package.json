@@ -29,6 +29,7 @@
 		"ai": "^7.0.126",
 		"context.dev": "2.10.0",
 		"eve": "^0.69.0",
+		"just-bash": "3.6.0",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
