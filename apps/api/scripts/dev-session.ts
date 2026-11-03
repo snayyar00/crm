@@ -21,10 +21,11 @@ if (!secret) {
 	throw new Error("BETTER_AUTH_SECRET is not set — run this from apps/api.");
 }
 
-const email = process.argv[2] ?? "dev@localhost";
+const args = process.argv.slice(2);
+const printOnly = args.includes("--print");
+const email = args.find((arg) => !arg.startsWith("--")) ?? "dev@localhost";
 const name = email.split("@")[0] ?? "Developer";
 const appUrl = localAppUrl(process.env.APP_URL);
-const loginHost = localLoginHost(appUrl);
 
 async function signCookieValue(value: string): Promise<string> {
 	const key = await crypto.subtle.importKey(
@@ -79,42 +80,52 @@ await db.session.upsert({
 });
 
 const cookieValue = await signCookieValue(token);
-const loginPath = `/login/${crypto.randomUUID()}`;
 
-await new Promise<void>((resolve) => {
-	let finished = false;
-	let server: ReturnType<typeof Bun.serve>;
-	let timeout: ReturnType<typeof setTimeout> | undefined;
-
-	const finish = () => {
-		if (finished) return;
-		finished = true;
-		if (timeout) clearTimeout(timeout);
-		server.stop();
-		resolve();
-	};
-
-	server = Bun.serve({
-		hostname: loginHost,
-		port: 0,
-		fetch(request) {
-			if (new URL(request.url).pathname !== loginPath) {
-				return new Response("Not found", { status: 404 });
-			}
-
-			setTimeout(finish, 0);
-			return createDevSessionResponse({
-				appUrl,
-				cookieName: COOKIE_NAME,
-				cookieValue,
-			});
-		},
-	});
-
-	timeout = setTimeout(finish, DEV_SESSION.login.timeoutMs);
-	console.log("Open this link to sign in:");
-	console.log(`http://${loginHost}:${server.port}${loginPath}`);
-	console.log("The link expires in 10 minutes.");
-});
+if (printOnly) {
+	console.log(`${COOKIE_NAME}=${cookieValue}`);
+} else {
+	await serveLoginLink();
+}
 
 await db.$disconnect();
+
+function serveLoginLink(): Promise<void> {
+	const loginHost = localLoginHost(appUrl);
+	const loginPath = `/login/${crypto.randomUUID()}`;
+
+	return new Promise<void>((resolve) => {
+		let finished = false;
+		let server: ReturnType<typeof Bun.serve>;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		const finish = () => {
+			if (finished) return;
+			finished = true;
+			if (timeout) clearTimeout(timeout);
+			server.stop();
+			resolve();
+		};
+
+		server = Bun.serve({
+			hostname: loginHost,
+			port: 0,
+			fetch(request) {
+				if (new URL(request.url).pathname !== loginPath) {
+					return new Response("Not found", { status: 404 });
+				}
+
+				setTimeout(finish, 0);
+				return createDevSessionResponse({
+					appUrl,
+					cookieName: COOKIE_NAME,
+					cookieValue,
+				});
+			},
+		});
+
+		timeout = setTimeout(finish, DEV_SESSION.login.timeoutMs);
+		console.log("Open this link to sign in:");
+		console.log(`http://${loginHost}:${server.port}${loginPath}`);
+		console.log("The link expires in 10 minutes.");
+	});
+}
