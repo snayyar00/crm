@@ -10,6 +10,29 @@ const EMPTY: AllowList = { domains: [], addresses: [] };
 let cachedSource: string | undefined;
 let cached: AllowList = EMPTY;
 
+function validHost(value: string): boolean {
+	if (value.length > 253) return false;
+
+	const labels = value.split(".");
+	return labels.every(
+		(label) =>
+			label.length > 0 &&
+			label.length <= 63 &&
+			/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+	);
+}
+
+function parseAddress(value: string): { address: string; host: string } | null {
+	const separator = value.indexOf("@");
+	if (separator <= 0 || separator !== value.lastIndexOf("@")) return null;
+
+	const local = value.slice(0, separator);
+	const host = value.slice(separator + 1);
+	if (/\s/.test(local) || !validHost(host)) return null;
+
+	return { address: value, host };
+}
+
 function allowList(): AllowList {
 	const source = process.env.ALLOWED_SIGN_IN ?? "";
 	if (source === cachedSource) return cached;
@@ -20,7 +43,13 @@ function allowList(): AllowList {
 	for (const raw of source.split(",")) {
 		const entry = raw.trim().toLowerCase().replace(/^@/, "");
 		if (!entry) continue;
-		(entry.includes("@") ? addresses : domains).push(entry);
+
+		if (entry.includes("@")) {
+			const parsed = parseAddress(entry);
+			if (parsed) addresses.push(parsed.address);
+		} else if (validHost(entry)) {
+			domains.push(entry);
+		}
 	}
 
 	cachedSource = source;
@@ -33,38 +62,18 @@ export function workspaceDomains(): readonly string[] {
 }
 
 export function primaryWorkspaceDomain(): string | undefined {
-	const { domains, addresses } = allowList();
-
-	if (domains[0]) return domains[0];
-
-	// An address-only allow list still names a workspace domain, and a solo
-	// self-hoster on `me@acme.com` wants the same account chooser as one on
-	// `acme.com`. Only when every allowed address shares a domain: `hd` narrows
-	// the chooser to one, so sending it for one of several would hide the rest.
-	const hosts = new Set(
-		addresses.map((address) => address.split("@")[1]).filter(Boolean),
-	);
-
-	return hosts.size === 1 ? [...hosts][0] : undefined;
+	return allowList().domains[0];
 }
 
-/**
- * The domain to pin Google's `hd` parameter to — ONLY when there is exactly one.
- *
- * `hd` makes Google itself refuse any account outside that hosted domain, before
- * the callback ever reaches us. With ALLOWED_SIGN_IN="techywebsolutions.com,
- * webability.io" the old code pinned it to domains[0], so the CRM advertised two
- * permitted domains and then rejected the second at Google with
- * "id token hosted domain (hd) \"webability.io\" does not satisfy the configured
- * \"hd\" option" — an error naming a setting the operator never set.
- *
- * Returning undefined for a multi-domain allow list is safe: `hd` is only a
- * pre-filter. The real gate is isWorkspaceEmail() in the sign-in hook, which
- * checks the whole list server-side and is unaffected.
- */
-export function googleHostedDomain(): string | undefined {
-	const { domains } = allowList();
-	return domains.length === 1 ? domains[0] : undefined;
+export function googleHostedDomainHint(): string | undefined {
+	const { domains, addresses } = allowList();
+	if (domains.length > 1) return undefined;
+	if (domains[0]) return domains[0];
+
+	const hosts = new Set(
+		addresses.map((address) => parseAddress(address)?.host).filter(Boolean),
+	);
+	return hosts.size === 1 ? [...hosts][0] : undefined;
 }
 
 export function hasSignInAllowList(): boolean {
@@ -76,17 +85,14 @@ export function isWorkspaceEmail(email: string | null | undefined): boolean {
 	const value = email?.trim().toLowerCase();
 	if (!value) return false;
 
-	const parts = value.split("@");
-	if (parts.length !== 2) return false;
-
-	const [local, host] = parts;
-	if (!local || !host) return false;
+	const parsed = parseAddress(value);
+	if (!parsed) return false;
 
 	const { domains, addresses } = allowList();
 
 	if (addresses.includes(value)) return true;
 
 	return domains.some(
-		(domain) => host === domain || host.endsWith(`.${domain}`),
+		(domain) => parsed.host === domain || parsed.host.endsWith(`.${domain}`),
 	);
 }

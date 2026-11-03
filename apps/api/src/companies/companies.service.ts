@@ -7,6 +7,11 @@ import {
 } from "@crm/db";
 import { OPEN_DEAL_STAGES } from "@crm/db/deal-stage";
 import type { FieldDefinitionWithOptions } from "@crm/db/fields";
+import { lockIdempotencyKey, lockIdempotencyKeys } from "@crm/db/idempotency";
+import {
+	COMPANY_IMPORT,
+	type CompanyImportInput,
+} from "@crm/validation/company-import";
 import {
 	BadRequestException,
 	ConflictException,
@@ -41,7 +46,6 @@ import {
 import type {
 	CompanyBulkOwnerInput,
 	CompanyCreateInput,
-	CompanyImportInput,
 	CompanyListInput,
 	CompanyRow,
 	CompanyUpdateInput,
@@ -157,6 +161,7 @@ export class CompaniesService {
 	}
 
 	async byId(id: string) {
+		const reportingCurrency = await this.conversion.reportingCurrency();
 		const company = await this.db.company.findUnique({
 			where: { id },
 			select: {
@@ -222,6 +227,7 @@ export class CompaniesService {
 						amount: true,
 						currency: true,
 						baseAmount: true,
+						baseCurrency: true,
 						expectedCloseDate: true,
 						owner: { select: OWNER_SELECT },
 					},
@@ -232,6 +238,30 @@ export class CompaniesService {
 		if (!company) {
 			throw new NotFoundException(`No company with id ${id}.`);
 		}
+
+		const openWhere: Prisma.DealWhereInput = {
+			companyId: id,
+			archivedAt: null,
+			stage: { in: [...OPEN_DEAL_STAGES] },
+		};
+		const [openDeals, openValue, unconverted] = await Promise.all([
+			this.db.deal.aggregate({
+				where: openWhere,
+				_count: { _all: true },
+				_min: { expectedCloseDate: true },
+			}),
+			this.db.deal.aggregate({
+				where: {
+					AND: [openWhere, this.conversion.countedWhere(reportingCurrency)],
+				},
+				_sum: { baseAmount: true },
+			}),
+			this.db.deal.count({
+				where: {
+					AND: [openWhere, this.conversion.pendingWhere(reportingCurrency)],
+				},
+			}),
+		]);
 
 		const {
 			deals,
@@ -251,13 +281,23 @@ export class CompaniesService {
 			enrichedAt: enrichedAt?.toISOString() ?? null,
 			primaryContactId: primaryContact?.id ?? null,
 			primaryContact,
-			reportingCurrency: await this.conversion.reportingCurrency(),
+			reportingCurrency,
+			openPipeline: {
+				count: openDeals._count._all,
+				totalCents: toCents(openValue._sum.baseAmount),
+				unconverted,
+				nextClose: openDeals._min.expectedCloseDate?.toISOString() ?? null,
+			},
 			deals: deals.map((deal) => ({
 				...deal,
 				amount: undefined,
 				baseAmount: undefined,
+				baseCurrency: undefined,
 				amountCents: toCents(deal.amount),
-				baseAmountCents: toCents(deal.baseAmount),
+				baseAmountCents:
+					deal.baseCurrency === reportingCurrency
+						? toCents(deal.baseAmount)
+						: null,
 				expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
 			})),
 		};
@@ -275,19 +315,20 @@ export class CompaniesService {
 	async create(input: CompanyCreateInput) {
 		const domain = normalizeDomain(input.domain);
 
-		if (domain) {
-			const existing = await this.db.company.findFirst({
-				where: { domain, archivedAt: null },
-				select: { id: true, name: true },
-			});
-			if (existing) {
-				throw new ConflictException(
-					`${existing.name} already uses the domain ${domain}.`,
-				);
-			}
-		}
-
 		const company = await this.agent.withCrmEvents(async (tx, emit) => {
+			if (domain) {
+				await lockIdempotencyKey(tx, `company-directory:${domain}`);
+				const existing = await tx.company.findFirst({
+					where: { domain, archivedAt: null },
+					select: { name: true },
+				});
+				if (existing) {
+					throw new ConflictException(
+						`${existing.name} already uses the domain ${domain}.`,
+					);
+				}
+			}
+
 			const created = await tx.company.create({
 				data: {
 					name: input.name.trim(),
@@ -320,6 +361,125 @@ export class CompaniesService {
 		return { id: company.id, name: company.name, domain: company.domain };
 	}
 
+	async import(input: CompanyImportInput) {
+		const skips: Array<{ row: number; reason: string }> = [];
+		const candidates = input.rows.flatMap((row, index) => {
+			const rowNumber = index + 2;
+			const name = row.name.trim();
+			if (!name) {
+				skips.push({ row: rowNumber, reason: "A company needs a name." });
+				return [];
+			}
+
+			const website = row.website?.trim() ?? "";
+			const domain = normalizeDomain(website);
+			if (website && !domain) {
+				skips.push({
+					row: rowNumber,
+					reason: `"${website}" is not a valid domain.`,
+				});
+				return [];
+			}
+
+			return [
+				{
+					row: rowNumber,
+					name,
+					domain,
+					phone: blankToNull(row.phone ?? ""),
+					city: blankToNull(row.city ?? ""),
+					stateCode: blankToNull(row.stateCode ?? ""),
+					industry: blankToNull(row.industry ?? ""),
+					subIndustry: blankToNull(row.subIndustry ?? ""),
+					description: blankToNull(row.description ?? ""),
+				},
+			];
+		});
+
+		const created = await this.agent.withCrmEvents(async (tx, emit) => {
+			const domains = [
+				...new Set(
+					candidates.flatMap((candidate) =>
+						candidate.domain ? [candidate.domain] : [],
+					),
+				),
+			].toSorted();
+			await lockIdempotencyKeys(
+				tx,
+				domains.map((domain) => `company-directory:${domain}`),
+			);
+
+			const existing = new Set(
+				(
+					await tx.company.findMany({
+						where: { domain: { in: domains }, archivedAt: null },
+						select: { domain: true },
+					})
+				).flatMap((company) => (company.domain ? [company.domain] : [])),
+			);
+			const accepted = [];
+			const seen = new Set<string>();
+			for (const candidate of candidates) {
+				if (candidate.domain && existing.has(candidate.domain)) {
+					skips.push({
+						row: candidate.row,
+						reason: `${candidate.domain} already belongs to a company.`,
+					});
+					continue;
+				}
+				if (candidate.domain && seen.has(candidate.domain)) {
+					skips.push({
+						row: candidate.row,
+						reason: `${candidate.domain} appears more than once in this file.`,
+					});
+					continue;
+				}
+				if (candidate.domain) seen.add(candidate.domain);
+				accepted.push(candidate);
+			}
+
+			if (accepted.length === 0) return [];
+			const rows = await tx.company.createManyAndReturn({
+				data: accepted.map(({ row: _row, ...company }) => ({
+					...company,
+					website: company.domain ? `https://${company.domain}` : null,
+					source: RecordSource.IMPORT,
+					enrichmentStatus: EnrichmentStatus.PENDING,
+				})),
+				select: { id: true, name: true, domain: true, createdAt: true },
+			});
+
+			for (const company of rows) {
+				await emit({
+					type: "company.created",
+					record: { kind: "company", id: company.id },
+					occurredAt: company.createdAt,
+					data: { name: company.name, domain: company.domain },
+				});
+			}
+			return rows;
+		});
+
+		const ids = created.map((company) => company.id);
+		await Promise.all([
+			this.agent.companiesCreated(ids, "Imported from CSV"),
+			this.fields.queueBackfillForNewRecords("COMPANY", ids),
+		]);
+		void this.backfillFavicons(created);
+
+		this.logger.log({
+			message: "Companies imported",
+			created: created.length,
+			skipped: skips.length,
+		});
+
+		return {
+			created: created.length,
+			skipped: skips.length,
+			skips: skips.toSorted((left, right) => left.row - right.row),
+		};
+	}
+
 	async update(id: string, input: CompanyUpdateInput) {
 		const data: Prisma.CompanyUpdateInput = {};
 
@@ -350,7 +510,7 @@ export class CompaniesService {
 			const domain = normalizeDomain(input.domain);
 			if (input.domain.trim() && !domain) {
 				throw new BadRequestException(
-					`"${input.domain}" is not a domain — try something like "stripe.com".`,
+					`"${input.domain}" is not a domain. Try something like "stripe.com".`,
 				);
 			}
 			data.domain = domain;
@@ -383,7 +543,7 @@ export class CompaniesService {
 			if (data.enrichmentStatus === "PENDING") {
 				await this.agent.companyCreated(
 					id,
-					"Domain changed — anything we knew was about a different company",
+					"Domain changed. Anything we knew was about a different company",
 				);
 				void this.favicon.backfill(id, updated.domain);
 			}
@@ -589,7 +749,7 @@ export class CompaniesService {
 
 		if (!company.domain) {
 			throw new BadRequestException(
-				"There is nothing to read without a domain — add one first.",
+				"There is nothing to read without a domain. Add one first.",
 			);
 		}
 
@@ -721,43 +881,6 @@ export class CompaniesService {
 		};
 	}
 
-	async import(input: CompanyImportInput) {
-		const toCreate: Prisma.CompanyCreateManyInput[] = [];
-		const skips: { row: number; reason: string }[] = [];
-
-		for (const [i, row] of input.rows.entries()) {
-			const name = row.name.trim();
-			if (!name) {
-				skips.push({ row: i + 1, reason: "No name" });
-				continue;
-			}
-			toCreate.push({
-				name,
-				phone: row.phone?.trim() || null,
-				city: row.city?.trim() || null,
-				stateCode: row.stateCode?.trim() || null,
-				industry: row.industry?.trim() || null,
-				subIndustry: row.subIndustry?.trim() || null,
-				website: row.website?.trim() || null,
-				description: row.description?.trim() || null,
-				source: RecordSource.IMPORT,
-				enrichmentStatus: EnrichmentStatus.SKIPPED,
-			});
-		}
-
-		if (toCreate.length > 0) {
-			await this.db.company.createMany({ data: toCreate });
-		}
-
-		this.logger.log({
-			message: "Companies imported",
-			created: toCreate.length,
-			skipped: skips.length,
-		});
-
-		return { created: toCreate.length, skipped: skips.length, skips };
-	}
-
 	private translate(cause: unknown, id: string): never {
 		if (cause instanceof PrismaNamespace.PrismaClientKnownRequestError) {
 			if (cause.code === "P2025") {
@@ -770,5 +893,19 @@ export class CompaniesService {
 			}
 		}
 		throw cause;
+	}
+
+	private async backfillFavicons(
+		companies: Array<{ id: string; domain: string | null }>,
+	): Promise<void> {
+		const queue = companies[Symbol.iterator]();
+		const width = Math.min(COMPANY_IMPORT.faviconConcurrency, companies.length);
+		await Promise.all(
+			Array.from({ length: width }, async () => {
+				for (const company of queue) {
+					await this.favicon.backfill(company.id, company.domain);
+				}
+			}),
+		);
 	}
 }

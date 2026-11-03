@@ -478,6 +478,7 @@ describe("durable custom-agent runtime", () => {
 			data: {
 				kind: "BUILDER",
 				userId,
+				permissionMode: "AUTO",
 				submissions: {
 					create: {
 						submittedById: userId,
@@ -509,8 +510,13 @@ describe("durable custom-agent runtime", () => {
 		});
 		builderConversationIds.push(conversation.id);
 		let delivered: Parameters<SendFn>[0] | null = null;
-		const send = (async (input: Parameters<SendFn>[0]) => {
+		let deliveredOptions: Parameters<SendFn>[1] | null = null;
+		const send = (async (
+			input: Parameters<SendFn>[0],
+			options: Parameters<SendFn>[1],
+		) => {
 			delivered = input;
+			deliveredOptions = options;
 			return { id: `durable-session-${suffix}-attachment` };
 		}) as unknown as SendFn;
 
@@ -526,6 +532,12 @@ describe("durable custom-agent runtime", () => {
 			filename: "brief.txt",
 		});
 		expect(Buffer.from(attachmentBytes.parse(parts[1]).data)).toEqual(content);
+		expect(deliveredOptions).toMatchObject({
+			auth: {
+				authenticator: "crm-builder",
+				attributes: { permissionMode: "auto" },
+			},
+		});
 	});
 
 	it("ingests a replayed Eve event and its usage exactly once", async () => {

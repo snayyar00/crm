@@ -177,6 +177,6 @@ export const filterCommitments = (
 		// A due date in the past is a misread, not a commitment we can act on.
 		if (c.dueDate < today) return false;
 		// evidence must exist - it is the only thing that makes a wrong extraction auditable
-		if (!c.evidence || !c.evidence.trim()) return false;
+		if (!c.evidence?.trim()) return false;
 		return true;
 	});

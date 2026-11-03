@@ -1,20 +1,18 @@
 "use client";
 
-import Edit from "@carbon/icons-react/es/Edit";
 import { DealStage } from "@crm/db/enums";
 import { Button } from "@crm/ui/components/button";
 import { Checkbox } from "@crm/ui/components/checkbox";
 import { Icon } from "@crm/ui/components/icon";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
-import { isDayBefore } from "@crm/ui/lib/format";
 import { cn } from "@crm/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { PencilIcon } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { RecordLink } from "@/components/crm/record-sheet/record-link";
-import { LocalDateTime, LocalRelativeDay } from "@/components/local-date-time";
-import { useViewerDay } from "@/components/viewer-day";
+import { LocalDateTime, LocalDay } from "@/components/local-date-time";
 import { activityLabel } from "@/lib/activity-presentation";
 import { dealStageLabel } from "@/lib/deal-stage";
 import { useCrmCache } from "@/lib/trpc/cache";
@@ -54,9 +52,8 @@ export function TimelineEntry({
 }) {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
-	const today = useViewerDay();
-
 	const [editing, setEditing] = useState(false);
+	const editButton = useRef<HTMLButtonElement>(null);
 
 	const complete = useMutation(
 		trpc.activities.complete.mutationOptions({
@@ -67,27 +64,28 @@ export function TimelineEntry({
 
 	const isTask = entry.type === "TASK";
 	const done = entry.completedAt !== null;
+	const overdue =
+		isTask &&
+		!done &&
+		entry.dueAt !== null &&
+		entry.dueAt.slice(0, 10) < new Date().toISOString().slice(0, 10);
+	const closeEditor = () => {
+		setEditing(false);
+		requestAnimationFrame(() => editButton.current?.focus());
+	};
 
 	if (editing) {
 		return (
 			<li className="flex gap-2.5 py-2">
 				<span className="mt-0.5 shrink-0 text-muted-foreground">
-					<Checkbox
-						checked={done}
-						disabled
-						aria-label={done ? "Mark as not done" : "Mark as done"}
-					/>
+					<Checkbox checked={done} disabled aria-label="Task status" />
 				</span>
-
-				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<TaskEditor task={entry} onClose={() => setEditing(false)} />
+				<div className="min-w-0 flex-1">
+					<TaskEditor task={entry} onClose={closeEditor} />
 				</div>
 			</li>
 		);
 	}
-
-	const overdue =
-		isTask && !done && entry.dueAt !== null && isDayBefore(entry.dueAt, today);
 
 	const change =
 		entry.type === "STAGE_CHANGE" ? stageChange.parse(entry.meta) : null;
@@ -164,8 +162,8 @@ export function TimelineEntry({
 						) : null}
 					</div>
 
-					<span className="shrink-0 text-muted-foreground">
-						<span className="hidden sm:inline">{author} · </span>
+					<span className="flex shrink-0 gap-x-3 text-muted-foreground">
+						<span className="hidden sm:inline">{author}</span>
 						<span className="tabular-nums">
 							<LocalDateTime date={when} options={TIME_OPTIONS} />
 						</span>
@@ -173,13 +171,14 @@ export function TimelineEntry({
 
 					{isTask ? (
 						<Button
+							ref={editButton}
+							type="button"
 							variant="ghost"
 							size="icon-xs"
-							className="self-center"
 							disabled={complete.isPending}
 							onClick={() => setEditing(true)}
 						>
-							<Icon icon={Edit} />
+							<Icon icon={PencilIcon} />
 							<span className="sr-only">Edit task</span>
 						</Button>
 					) : null}
@@ -211,7 +210,7 @@ export function TimelineEntry({
 								label={
 									<>
 										{overdue ? "Overdue" : "Due"}{" "}
-										<LocalRelativeDay date={entry.dueAt} />
+										<LocalDay date={entry.dueAt} />
 									</>
 								}
 							/>

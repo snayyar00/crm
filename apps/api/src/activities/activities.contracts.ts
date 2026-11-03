@@ -2,7 +2,7 @@ import { ActivityType } from "@crm/db";
 import { activityMeta } from "@crm/validation/activity-meta";
 import { z } from "zod";
 import { listInput } from "../trpc/list-input";
-import { taskDueDayInput } from "./task-due-date";
+import { TASK_WINDOWS, taskDueDayInput } from "./task-due-date";
 
 const COMPOSABLE_TYPES = [
 	ActivityType.NOTE,
@@ -72,7 +72,7 @@ export const activityCreateInput = z
 	.refine(
 		(input) => input.type !== ActivityType.TASK || Boolean(input.subject),
 		{
-			message: "A task needs a subject — it is the thing to do.",
+			message: "A task needs a subject. It is the thing to do.",
 			path: ["subject"],
 		},
 	);
@@ -82,7 +82,7 @@ export type ActivityCreateInput = z.infer<typeof activityCreateInput>;
 export const activityUpdateInput = z.object({
 	id: z.string(),
 	subject: z.string().trim().min(1, {
-		message: "A task needs a subject — it is the thing to do.",
+		message: "A task needs a subject. It is the thing to do.",
 	}),
 	dueAt: taskDueDayInput.nullable(),
 });
@@ -94,11 +94,17 @@ export const completeInput = z.object({
 	completed: z.boolean().default(true),
 });
 
+export const myTasksInput = z.object({
+	window: z.enum(["overdue", "upcoming", "all"]).default("all"),
+	limit: z.number().int().min(1).max(100).default(25),
+});
+
+export type MyTasksInput = z.infer<typeof myTasksInput>;
+
 export const taskListInput = listInput.extend({
-	status: z.string().default("all"),
-	due: z.array(z.string()).default([]),
+	status: z.enum(["all", "open", "done"]).default("all"),
+	due: z.array(z.enum(TASK_WINDOWS)).default([]),
 	createdBy: z.array(z.string()).default([]),
-	today: taskDueDayInput,
 });
 
 export type TaskListInput = z.infer<typeof taskListInput>;
@@ -190,6 +196,8 @@ export const timelineCountsOutput = z.object({
 
 export type TimelineCounts = z.infer<typeof timelineCountsOutput>;
 
+export const myTasksOutput = z.array(activityEntryOutput);
+
 const taskCompanyRefOutput = z
 	.object({
 		id: z.string(),
@@ -217,6 +225,10 @@ const taskRowOutput = z.object({
 export const taskListOutput = z.object({
 	rows: z.array(taskRowOutput),
 	total: z.number(),
+	day: z.object({
+		today: taskDueDayInput,
+		timeZone: z.string(),
+	}),
 	facetCounts: z.record(z.string(), z.record(z.string(), z.number())),
 });
 

@@ -1,16 +1,21 @@
 "use client";
 
 import { DealStage } from "@crm/db/enums";
+import { IndicatorDot } from "@crm/ui/components/status-indicator";
 import { cn } from "@crm/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { DealStageIndicator } from "@/components/crm/deal-stage";
 import {
 	type EngagementType,
 	EngagementTypeDialog,
 } from "@/components/crm/engagement-type-dialog";
-import { dealStageLabel, isClosedStage, OPEN_STAGES } from "@/lib/deal-stage";
+import {
+	dealStageLabel,
+	dealStagePresentation,
+	isClosedStage,
+	OPEN_STAGES,
+} from "@/lib/deal-stage";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
@@ -25,9 +30,6 @@ export function StageStepper({
 }) {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
-	// Winning is the one transition that needs an answer before it can be
-	// recorded — the server refuses a CLOSED_WON with no engagement type, the
-	// same way it refuses a loss with no reason.
 	const [winning, setWinning] = useState(false);
 
 	const setStage = useMutation(
@@ -64,16 +66,25 @@ export function StageStepper({
 								setStage.mutate({ id: dealId, stage: option });
 							}}
 							className={cn(
-								"min-w-0 flex-1 border-t-2 pt-2 text-left text-xs transition-colors disabled:pointer-events-none disabled:opacity-50",
+								"group/step flex min-w-0 flex-1 flex-col gap-2 rounded-xs text-left text-xs outline-none transition-colors focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50",
 								reached
-									? "border-foreground text-foreground"
-									: "border-border text-muted-foreground hover:border-muted-foreground hover:text-foreground",
+									? "text-foreground"
+									: "text-muted-foreground hover:text-foreground",
 								current && "font-medium",
 							)}
 						>
-							<span className="block truncate">
+							<span
+								aria-hidden
+								className={cn(
+									"h-1.5 rounded-full transition-colors",
+									reached
+										? "bg-foreground"
+										: "bg-foreground/10 group-hover/step:bg-foreground/30",
+								)}
+							/>
+							<span className="text-pretty wrap-break-word leading-4">
 								{current && option === DealStage.CLOSED_WON ? (
-									<DealStageIndicator stage={stage} className="text-xs" />
+									<StageOutcome stage={stage} />
 								) : (
 									dealStageLabel(option)
 								)}
@@ -85,8 +96,9 @@ export function StageStepper({
 
 			{exited ? (
 				<li className="flex min-w-0 flex-1">
-					<div className="min-w-0 flex-1 border-foreground border-t-2 pt-2">
-						<DealStageIndicator stage={stage} className="text-xs" />
+					<div className="flex min-w-0 flex-1 flex-col gap-2 text-xs leading-4">
+						<span aria-hidden className="h-1.5 rounded-full bg-foreground" />
+						<StageOutcome stage={stage} />
 					</div>
 				</li>
 			) : null}
@@ -104,5 +116,15 @@ export function StageStepper({
 				}
 			/>
 		</ol>
+	);
+}
+
+function StageOutcome({ stage }: { stage: DealStage }) {
+	const { label, tone } = dealStagePresentation(stage);
+	return (
+		<span className="flex min-w-0 items-baseline gap-1.5">
+			<IndicatorDot tone={tone} aria-hidden="true" className="translate-y-px" />
+			<span className="text-pretty wrap-break-word">{label}</span>
+		</span>
 	);
 }

@@ -14,7 +14,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g bun@1.3.12
+RUN npm install -g bun@1.4.0
 
 WORKDIR /app
 

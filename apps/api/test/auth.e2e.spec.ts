@@ -70,7 +70,7 @@ describe("Auth (e2e)", () => {
 		// variable. Calling the exported predicate removes the disagreement by
 		// construction.
 		const { isGoogleConfigured, isMicrosoftConfigured } = await import(
-			"@crm/auth"
+			"@crm/auth/env"
 		);
 
 		expect(response.body.result.data).toEqual({

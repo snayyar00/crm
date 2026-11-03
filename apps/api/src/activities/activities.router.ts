@@ -18,6 +18,8 @@ import {
 	activityUpdateOutput,
 	completeInput,
 	completeOutput,
+	myTasksInput,
+	myTasksOutput,
 	taskListInput,
 	taskListOutput,
 	timelineCountsInput,
@@ -50,6 +52,18 @@ export class ActivitiesRouter {
 	})
 	async timelineCounts(@Input() input: z.infer<typeof timelineCountsInput>) {
 		return this.activities.timelineCounts(input);
+	}
+
+	@Query({
+		input: myTasksInput,
+		output: myTasksOutput,
+		meta: restMeta("GET", "/activities/my-tasks", ["Activities"]),
+	})
+	async myTasks(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof myTasksInput>,
+	) {
+		return this.activities.myTasks(input, ctx.user.id);
 	}
 
 	@Query({

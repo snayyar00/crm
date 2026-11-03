@@ -1,5 +1,14 @@
 import { Badge } from "@crm/ui/components/badge";
 import {
+	PageShell,
+	PageShellContent,
+	PageShellDescription,
+	PageShellHeader,
+	PageShellHeading,
+	PageShellLoading,
+	PageShellTitle,
+} from "@crm/ui/components/page-shell";
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -9,15 +18,6 @@ import {
 } from "@crm/ui/components/table";
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import {
-	PageShell,
-	PageShellContent,
-	PageShellDescription,
-	PageShellHeader,
-	PageShellHeading,
-	PageShellLoading,
-	PageShellTitle,
-} from "@/components/page-shell";
 import { requireSession } from "@/lib/session";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 import type { RouterOutputs } from "@/lib/trpc/types";

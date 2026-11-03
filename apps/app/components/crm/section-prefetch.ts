@@ -5,29 +5,22 @@ import { useCallback } from "react";
 import { companiesSearchParams } from "@/app/(app)/[slug]/companies/companies-search-params";
 import { contactsSearchParams } from "@/app/(app)/[slug]/contacts/contacts-search-params";
 import { dealsSearchParams } from "@/app/(app)/[slug]/deals/deals-search-params";
-import { tasksSearchParams } from "@/app/(app)/[slug]/tasks/tasks-search-params";
-import { useViewerDay } from "@/components/viewer-day";
+import {
+	normalizeTasksInput,
+	tasksSearchParams,
+} from "@/app/(app)/[slug]/tasks/tasks-search-params";
 import { useTRPC } from "@/lib/trpc/client";
-
-export type Section =
-	| "/"
-	| "/companies"
-	| "/contacts"
-	| "/deals"
-	| "/tasks"
-	| "/settings";
 
 export function usePrefetchSection(): (section: string) => void {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const today = useViewerDay();
 
 	return useCallback(
 		(section: string) => {
 			switch (section) {
 				case "/":
 					void queryClient.prefetchQuery(
-						trpc.dashboard.summary.queryOptions({ scope: "me", today }),
+						trpc.dashboard.summary.queryOptions({ scope: "me" }),
 					);
 					return;
 				case "/companies":
@@ -51,16 +44,15 @@ export function usePrefetchSection(): (section: string) => void {
 					return;
 				case "/tasks":
 					void queryClient.prefetchQuery(
-						trpc.activities.tasks.queryOptions({
-							...tasksSearchParams.defaultInput(),
-							today,
-						}),
+						trpc.activities.tasks.queryOptions(
+							normalizeTasksInput(tasksSearchParams.defaultInput()),
+						),
 					);
 					return;
 				default:
 					return;
 			}
 		},
-		[trpc, queryClient, today],
+		[trpc, queryClient],
 	);
 }

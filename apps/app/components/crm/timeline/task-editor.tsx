@@ -20,10 +20,9 @@ export function TaskEditor({
 }) {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
-
 	const [draft, setDraft] = useState(task.subject ?? "");
-	const [dueAt, setDueAt] = useState(task.dueAt ?? "");
-
+	const [dueAt, setDueAt] = useState(task.dueAt?.slice(0, 10) ?? "");
+	const text = draft.trim();
 	const update = useMutation(
 		trpc.activities.update.mutationOptions({
 			onSuccess: async () => {
@@ -34,23 +33,16 @@ export function TaskEditor({
 		}),
 	);
 
-	const text = draft.trim();
-
 	const submit = () => {
-		if (text === "" || update.isPending) return;
-		update.mutate({
-			id: task.id,
-			subject: text,
-			dueAt: dueAt || null,
-		});
+		if (!text || update.isPending) return;
+		update.mutate({ id: task.id, subject: text, dueAt: dueAt || null });
 	};
 
 	return (
 		<ActivityForm
 			value={draft}
 			onValueChange={setDraft}
-			ariaLabel="What needs doing"
-			autoFocus
+			ariaLabel="Task"
 			onSubmit={submit}
 			onEscape={onClose}
 		>
@@ -59,8 +51,8 @@ export function TaskEditor({
 				onChange={setDueAt}
 				disabled={update.isPending}
 			/>
-
 			<InputGroupButton
+				type="button"
 				variant="ghost"
 				size="xs"
 				className="ml-auto"
@@ -69,12 +61,11 @@ export function TaskEditor({
 			>
 				Cancel
 			</InputGroupButton>
-
 			<InputGroupButton
 				type="submit"
 				variant="default"
 				size="xs"
-				disabled={text === "" || update.isPending}
+				disabled={!text || update.isPending}
 			>
 				{update.isPending ? <Spinner /> : null}
 				Save

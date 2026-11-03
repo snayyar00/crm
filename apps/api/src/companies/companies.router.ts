@@ -78,6 +78,15 @@ export class CompaniesRouter {
 	}
 
 	@Mutation({
+		input: companyImportInput,
+		output: companyImportOutput,
+		meta: restMeta("POST", "/companies/import", ["Companies"]),
+	})
+	async import(@Input() input: z.infer<typeof companyImportInput>) {
+		return this.companies.import(input);
+	}
+
+	@Mutation({
 		input: companyUpdateArgs,
 		output: companySummaryOutput,
 		meta: restMeta("PATCH", "/companies/{id}", ["Companies"]),
@@ -187,14 +196,5 @@ export class CompaniesRouter {
 		@Input() input: z.infer<typeof setPrimaryContactInput>,
 	) {
 		return this.companies.setPrimaryContact(input.companyId, input.contactId);
-	}
-
-	@Mutation({
-		input: companyImportInput,
-		output: companyImportOutput,
-		meta: restMeta("POST", "/companies/import", ["Companies"]),
-	})
-	async import(@Input() input: z.infer<typeof companyImportInput>) {
-		return this.companies.import(input);
 	}
 }

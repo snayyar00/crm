@@ -1,18 +1,18 @@
-import { isGoogleConfigured, signsInWithGoogle } from "@crm/auth";
+import { isGoogleConfigured } from "@crm/auth/env";
+import { GOOGLE_PROVIDER_ID, signsInWithGoogle } from "@crm/auth/scopes";
 import type { Db, Prisma } from "@crm/db";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
-import { MailboxMatchService } from "../mailbox/mailbox-match.service";
-import { MailboxTokenService } from "../mailbox/mailbox-token.service";
-import { SyncStateService } from "../mailbox/sync-state.service";
 import {
-	GOOGLE_PROVIDER_ID,
 	GOOGLE_SYNC_SOURCES,
 	type GoogleSyncSource,
 	SCOPE_FOR_SOURCE,
-} from "./google.constants";
+} from "../mailbox/mailbox.constants";
+import { MailboxMatchService } from "../mailbox/mailbox-match.service";
+import { MailboxTokenService } from "../mailbox/mailbox-token.service";
+import { SyncStateService } from "../mailbox/sync-state.service";
 import type {
 	GoogleConnectionStatus,
 	GoogleSourceStatus,
@@ -187,7 +187,7 @@ export class GoogleConnectionService {
 		const ours = await this.match.internalIdentity();
 		if (ours.domains.has(normalised)) {
 			throw new NotFoundException(
-				"That is our own domain — it is already excluded.",
+				"That is our own domain. It is already excluded.",
 			);
 		}
 

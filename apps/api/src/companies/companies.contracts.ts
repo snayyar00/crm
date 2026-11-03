@@ -1,5 +1,9 @@
 import { DealStage, EnrichmentStatus, RecordSource } from "@crm/db";
 import { FIELD_TYPES } from "@crm/db/fields";
+import {
+	type CompanyImportInput,
+	companyImportInput as sharedCompanyImportInput,
+} from "@crm/validation/company-import";
 import { z } from "zod";
 import { bulkIdsInput } from "../crm/bulk";
 import { fieldEntity, recordFieldValues } from "../fields/fields.contracts";
@@ -24,6 +28,9 @@ export const companyCreateInput = z.object({
 });
 
 export type CompanyCreateInput = z.infer<typeof companyCreateInput>;
+
+export const companyImportInput = sharedCompanyImportInput;
+export type { CompanyImportInput };
 
 const companyUpdateInput = z.object({
 	name: z.string().trim().min(1).optional(),
@@ -211,6 +218,12 @@ export const companyDetailOutput = z.object({
 	primaryContactId: z.string().nullable(),
 	primaryContact: companyDetailPrimaryContactOutput.nullable(),
 	reportingCurrency: z.string(),
+	openPipeline: z.object({
+		count: z.number().int().nonnegative(),
+		totalCents: z.number().nullable(),
+		unconverted: z.number().int().nonnegative(),
+		nextClose: z.string().nullable(),
+	}),
 	deals: z.array(companyDetailDealOutput),
 });
 
@@ -240,25 +253,6 @@ export const companyBulkResultOutput = z.object({
 	failed: z.number(),
 	message: z.string().nullable(),
 });
-
-export const companyImportRowInput = z.object({
-	name: z.string(),
-	phone: z.string().optional(),
-	city: z.string().optional(),
-	stateCode: z.string().optional(),
-	industry: z.string().optional(),
-	subIndustry: z.string().optional(),
-	website: z.string().optional(),
-	description: z.string().optional(),
-});
-
-export type CompanyImportRowInput = z.infer<typeof companyImportRowInput>;
-
-export const companyImportInput = z.object({
-	rows: z.array(companyImportRowInput).min(1).max(5000),
-});
-
-export type CompanyImportInput = z.infer<typeof companyImportInput>;
 
 export const companyImportOutput = z.object({
 	created: z.number(),

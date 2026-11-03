@@ -21,10 +21,11 @@ import {
 import { notifySignedIn } from "./signed-in";
 import { slackConnectGuard } from "./slack-connect";
 import { rememberSlackInstall, replaceSlackConnection } from "./slack-grant";
+import { slackOAuthCallback } from "./slack-oauth-callback";
 import { SLACK_REQUESTED_SCOPES, SLACK_USER_SCOPES } from "./slack-scopes";
 import { queueSlackInventorySync } from "./slack-sync";
 import {
-	googleHostedDomain,
+	googleHostedDomainHint,
 	hasSignInAllowList,
 	isWorkspaceEmail,
 	primaryWorkspaceDomain,
@@ -45,14 +46,10 @@ if (env.google) {
 
 		accessType: "offline",
 
-		// Google returns a refresh token only on an account's FIRST grant unless
-		// consent is forced. Without this, any account that has authorised the app
-		// before — including one whose earlier attempt failed *after* Google
-		// recorded the grant — signs in with an access token that dies in an hour
-		// and can never be renewed, so its mailbox silently stops syncing.
 		prompt: "consent",
 	};
-	const hostedDomain = googleHostedDomain();
+
+	const hostedDomain = googleHostedDomainHint();
 	if (hostedDomain) google.hd = hostedDomain;
 
 	socialProviders.google = google;
@@ -215,6 +212,7 @@ export const auth = betterAuth({
 							},
 						],
 					}),
+					slackOAuthCallback,
 				]
 			: []),
 		organization({
