@@ -841,10 +841,10 @@ export async function stageRunResult(
 		if (run.status !== "RUNNING") {
 			throw new Error(`This agent run already ended with ${run.status}.`);
 		}
-		if (input.noActionNeeded) {
-			const refusal = await noActionNeededRefusal(tx, run);
-			if (refusal) throw new Error(refusal);
-		}
+		const refusal = input.noActionNeeded
+			? await noActionNeededRefusal(tx, run)
+			: await unreportedNoActionRefusal(tx, run);
+		if (refusal) throw new Error(refusal);
 
 		const result: RunResult = { ...(input.result ?? {}) };
 		if (input.noActionNeeded) {
@@ -995,6 +995,36 @@ async function noActionNeededRefusal(
 	if (externalManifestActions(version.manifest).length === 0) return null;
 
 	return `This ${triggerType.toLowerCase()} run cannot end with no action needed, because its agent declares an action. Perform the declared action, or report why it failed.`;
+}
+
+async function unreportedNoActionRefusal(
+	tx: Prisma.TransactionClient,
+	run: LockedAgentRun,
+): Promise<string | null> {
+	const { triggerType } = await tx.agentRun.findUniqueOrThrow({
+		where: { id: run.id },
+		select: { triggerType: true },
+	});
+	if (!NO_ACTION_TRIGGER_TYPES.has(triggerType)) return null;
+
+	const version = await tx.agentVersion.findUniqueOrThrow({
+		where: { id: run.versionId },
+		select: { manifest: true },
+	});
+	const attempted = new Set(
+		(
+			await tx.agentAction.findMany({
+				where: { runId: run.id },
+				select: { type: true },
+			})
+		).map((row) => row.type),
+	);
+	const missing = externalManifestActions(version.manifest).find(
+		(action) => !attempted.has(action.type),
+	);
+	if (!missing) return null;
+
+	return `The declared ${missing.type} action was not performed in this run. Perform it, or call finish_run again with noActionNeeded and the reason none of the declared actions applied.`;
 }
 
 async function requiredActionFailure(

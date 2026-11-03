@@ -32,7 +32,7 @@ export function renderDue(due: {
 	skipped: number;
 }): string {
 	if (due.due.length === 0) {
-		return `Nothing is due as of ${due.now}: all ${due.inScope} approved records were reviewed already and have not changed. Call \`finish_run\` now with no changes.`;
+		return `Nothing is due as of ${due.now}: all ${due.inScope} approved records were reviewed already and have not changed. Call \`finish_run\` now with \`noActionNeeded\` set to that reason.`;
 	}
 	const lines = due.due.map((row) => {
 		const state = row.state

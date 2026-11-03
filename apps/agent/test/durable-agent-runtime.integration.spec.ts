@@ -855,6 +855,48 @@ describe("durable custom-agent runtime", () => {
 		).toBe(0);
 	});
 
+	it("asks a scheduled run that performed no declared action to report no action needed", async () => {
+		const run = await createRun("RUNNING", new Date(), null, "SCHEDULE");
+		let stageError: Error | null = null;
+		try {
+			await stageRunResult(run.id, {
+				summary: "Reviewed 4 records, nothing was due",
+				result: { processed: 4 },
+			});
+		} catch (error) {
+			stageError = error as Error;
+		}
+		expect(stageError?.message).toContain(
+			"The declared crm.activity.create action was not performed",
+		);
+		expect(stageError?.message).toContain("noActionNeeded");
+		expect(
+			(await db.agentRun.findUniqueOrThrow({ where: { id: run.id } })).result,
+		).toBeNull();
+
+		await stageRunResult(run.id, {
+			summary: "Reviewed 4 records, nothing was due",
+			result: { processed: 4 },
+			noActionNeeded: { reason: "No record had a playbook step due." },
+		});
+		const staged = await db.agentRun.findUniqueOrThrow({
+			where: { id: run.id },
+		});
+		expect(
+			await finishRun(run.id, {
+				summary: staged.summary ?? "",
+				result: runResultOf(staged.result),
+			}),
+		).toEqual({ id: run.id, status: "SUCCEEDED" });
+
+		const manual = await createRun();
+		await stageRunResult(manual.id, { summary: "Claimed completion" });
+		expect(
+			(await db.agentRun.findUniqueOrThrow({ where: { id: manual.id } }))
+				.summary,
+		).toBe("Claimed completion");
+	});
+
 	it("accepts a no-action ending on an event run whose condition was not met", async () => {
 		const run = await createRun("RUNNING", new Date(), null, "EVENT");
 		await stageRunResult(run.id, {
