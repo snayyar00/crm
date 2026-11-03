@@ -30,7 +30,7 @@ import {
 } from "../lib/dispatch";
 import { DISPATCH } from "../lib/dispatch-config";
 import { settle } from "../lib/enrichment";
-import { settleRunSession } from "../lib/run-runtime";
+import { settleRunSession, settleStagedRun } from "../lib/run-runtime";
 import { attribute } from "../lib/session-purpose";
 import { createSlackChannel } from "../lib/slack-membership";
 import { reconcileStaleTasks } from "../lib/stale-tasks";
@@ -298,6 +298,12 @@ export default defineChannel({
 
 		async "session.waiting"(_data, channel) {
 			if (await closeTask(channel.continuation?.token, "ran")) return;
+
+			const runId = runIdFromToken(channel.continuation?.token);
+			if (runId) {
+				await settleStagedRun(runId);
+				return;
+			}
 
 			const conversationId = builderIdFromToken(channel.continuation?.token);
 			if (!conversationId) return;

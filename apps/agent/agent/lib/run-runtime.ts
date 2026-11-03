@@ -966,6 +966,18 @@ export async function settleRunSession(runId: string) {
 	});
 }
 
+export async function settleStagedRun(runId: string) {
+	const run = await db.agentRun.findUnique({
+		where: { id: runId },
+		select: { status: true, summary: true, result: true },
+	});
+	if (run?.status !== "RUNNING" || run.result === null) return null;
+	return finishRun(runId, {
+		summary: run.summary ?? "The agent run completed.",
+		result: runResultOf(run.result),
+	});
+}
+
 async function noActionNeededRefusal(
 	tx: Prisma.TransactionClient,
 	run: LockedAgentRun,

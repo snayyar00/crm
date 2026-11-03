@@ -18,6 +18,7 @@ import {
 	finishRun,
 	runResultOf,
 	settleRunSession,
+	settleStagedRun,
 	stageRunResult,
 } from "../agent/lib/run-runtime";
 
@@ -776,6 +777,27 @@ describe("durable custom-agent runtime", () => {
 		expect(
 			await db.agentRun.findUniqueOrThrow({ where: { id: finished.id } }),
 		).toMatchObject({ status: "SUCCEEDED", summary: "done" });
+	});
+
+	it("settles a staged run when its session parks, and leaves an unstaged one running", async () => {
+		const unstaged = await createRun();
+		await settleStagedRun(unstaged.id);
+		expect(
+			await db.agentRun.findUniqueOrThrow({ where: { id: unstaged.id } }),
+		).toMatchObject({ status: "RUNNING" });
+
+		const staged = await createRun();
+		await satisfyRequiredActivity(staged.id, "settle-on-wait");
+		await stageRunResult(staged.id, { summary: "parked", result: { n: 2 } });
+		await settleStagedRun(staged.id);
+		expect(
+			await db.agentRun.findUniqueOrThrow({ where: { id: staged.id } }),
+		).toMatchObject({ status: "SUCCEEDED", summary: "parked" });
+
+		await settleStagedRun(staged.id);
+		expect(
+			await db.agentRun.findUniqueOrThrow({ where: { id: staged.id } }),
+		).toMatchObject({ status: "SUCCEEDED" });
 	});
 
 	it("fails a run that never performs its declared external action", async () => {
