@@ -191,6 +191,12 @@ Two rules follow for the serverless build:
   mailbox-wide delta, so the Outlook cursor is the last `receivedDateTime` seen,
   re-read with a one-second overlap; `rfcMessageId` is unique, so the overlap costs a
   duplicate fetch and never a duplicate row.
+- **A lost Gmail window is repaired by `POST /internal/sync/backfill/gmail`**
+  (`CRON_SECRET`, one page per call, `dryRun` defaults to true, repeat with
+  `nextPageToken`). It leaves the `MailboxSync` row and its cursor alone. `store`
+  runs with `historical: true`: no commitment extraction, no record creation, the
+  activity is dated at the mail, and `lastActivityAt` moves without bumping
+  `updatedAt`, so old mail does not read as a change to the record agents.
 - **Microsoft has no token-revocation endpoint.** `revoke` clears the columns and the
   UI says the consent itself is removed in the user's Microsoft account. Google's still
   posts to `oauth2.googleapis.com/revoke` and refuses to clear if that fails.

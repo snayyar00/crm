@@ -1,10 +1,12 @@
 import {
+	BadRequestException,
 	Controller,
 	ForbiddenException,
 	Get,
 	Headers,
 	Logger,
 	Post,
+	Req,
 	ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -18,8 +20,11 @@ import {
 	ApiTags,
 } from "@nestjs/swagger";
 import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
+import type { Request } from "express";
 import type { EnvironmentVariables } from "../config/env.validation";
 import { EmailDispatchService } from "../email/email-dispatch.service";
+import { gmailBackfillInput } from "../google/google.contracts";
+import { GoogleSyncService } from "../google/google-sync.service";
 import { ObligationDigestService } from "../obligations/obligation-digest.service";
 import { MailboxSyncService } from "./mailbox-sync.service";
 
@@ -38,6 +43,7 @@ export class SyncController {
 
 	constructor(
 		private readonly sync: MailboxSyncService,
+		private readonly google: GoogleSyncService,
 		private readonly emails: EmailDispatchService,
 		private readonly obligationDigest: ObligationDigestService,
 		config: ConfigService<EnvironmentVariables, true>,
@@ -99,6 +105,31 @@ export class SyncController {
 	@AllowAnonymous()
 	async obligationsViaPost(@Headers("authorization") authorization?: string) {
 		return this.runObligations(authorization);
+	}
+
+	@Post("backfill/gmail")
+	@AllowAnonymous()
+	@ApiExcludeEndpoint()
+	async backfillGmail(
+		@Req() request: Request,
+		@Headers("authorization") authorization?: string,
+	) {
+		if (!this.secret) {
+			this.logger.error({
+				message: "CRON_SECRET is not set — refusing to run the Gmail backfill.",
+			});
+			throw new ServiceUnavailableException("Backfill is not configured.");
+		}
+		if (!timingSafeEquals(authorization ?? "", `Bearer ${this.secret}`)) {
+			throw new ForbiddenException();
+		}
+
+		const input = gmailBackfillInput.safeParse(request.body);
+		if (!input.success) {
+			throw new BadRequestException(input.error.issues);
+		}
+
+		return this.google.backfillGmail(input.data);
 	}
 
 	/**

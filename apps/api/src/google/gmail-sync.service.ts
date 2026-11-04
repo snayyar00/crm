@@ -24,6 +24,7 @@ import {
 	plainTextBody,
 	rootMessageId,
 } from "./gmail-mime";
+import type { GmailBackfillInput } from "./google.contracts";
 
 const MAX_MESSAGES_PER_TICK = 120;
 
@@ -35,6 +36,23 @@ export type GmailSyncOutcome = {
 	threadsTouched?: number;
 	reason?: string;
 };
+
+export type GmailBackfillReport =
+	| {
+			status: "ok";
+			dryRun: boolean;
+			listed: number;
+			stored: number;
+			alreadyStored: number;
+			noMatch: number;
+			failed: number;
+			companyIds: string[];
+			nextPageToken: string | null;
+	  }
+	| {
+			status: "not-connected" | "reconnect" | "rate-limited" | "failed";
+			reason: string;
+	  };
 
 @Injectable()
 export class GmailSyncService {
@@ -93,6 +111,105 @@ export class GmailSyncService {
 		}
 
 		return this.incremental(row, token.accessToken, mailbox, row.cursor);
+	}
+
+	async backfillPage(input: GmailBackfillInput): Promise<GmailBackfillReport> {
+		const row = await this.db.mailboxSync.findFirst({
+			where: { source: "gmail", user: { email: input.email } },
+		});
+		if (!row) {
+			return {
+				status: "not-connected",
+				reason: "No Gmail sync for this address.",
+			};
+		}
+
+		const token = await this.tokens.accessTokenFor(row.userId, "gmail");
+		if (token.outcome === "not-connected") {
+			return { status: "not-connected", reason: token.reason };
+		}
+		if (token.outcome === "needs-reconnect") {
+			return { status: "reconnect", reason: token.reason };
+		}
+
+		const profile = await this.gmail.profile(token.accessToken);
+		if (profile.outcome !== "ok") return this.backfillFailure(profile);
+
+		const mailbox = profile.data.emailAddress?.toLowerCase();
+		if (!mailbox) {
+			return { status: "failed", reason: "Gmail returned no mailbox address." };
+		}
+
+		const page = await this.gmail.listMessages(token.accessToken, {
+			after: input.after,
+			before: input.before,
+			pageToken: input.pageToken,
+		});
+		if (page.outcome !== "ok") return this.backfillFailure(page);
+
+		const ids = (page.data.messages ?? []).flatMap((message) =>
+			message.id ? [message.id] : [],
+		);
+		const context = await this.threads.context();
+		const companyIds = new Set<string>();
+		const counts = { stored: 0, alreadyStored: 0, noMatch: 0, failed: 0 };
+
+		for (const id of ids) {
+			const message = await this.gmail.getMessage(token.accessToken, id);
+			const parsed = message.outcome === "ok" ? this.parse(message.data) : null;
+			if (!parsed) {
+				counts.failed += 1;
+				continue;
+			}
+
+			const preview = await this.threads.preview(row, parsed, context);
+			if (preview.outcome === "already-stored") {
+				counts.alreadyStored += 1;
+				continue;
+			}
+			if (preview.outcome === "no-match") {
+				counts.noMatch += 1;
+				continue;
+			}
+
+			const stored =
+				input.dryRun ||
+				(await this.threads.store(
+					row,
+					{ mailbox, origin: "gmail", historical: true },
+					parsed,
+					context,
+				));
+			if (!stored) {
+				counts.alreadyStored += 1;
+				continue;
+			}
+
+			counts.stored += 1;
+			if (preview.companyId) companyIds.add(preview.companyId);
+		}
+
+		return {
+			status: "ok",
+			dryRun: input.dryRun,
+			listed: ids.length,
+			...counts,
+			companyIds: [...companyIds],
+			nextPageToken: page.data.nextPageToken ?? null,
+		};
+	}
+
+	private backfillFailure(result: {
+		outcome: string;
+		reason: string;
+	}): GmailBackfillReport {
+		if (result.outcome === "unauthorized") {
+			return { status: "reconnect", reason: result.reason };
+		}
+		if (result.outcome === "rate-limited") {
+			return { status: "rate-limited", reason: result.reason };
+		}
+		return { status: "failed", reason: result.reason };
 	}
 
 	private async start(

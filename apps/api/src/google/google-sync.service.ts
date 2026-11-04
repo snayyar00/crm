@@ -5,7 +5,11 @@ import {
 } from "../mailbox/mailbox.constants";
 import { SyncStateService } from "../mailbox/sync-state.service";
 import { CalendarSyncService } from "./calendar-sync.service";
-import { GmailSyncService } from "./gmail-sync.service";
+import {
+	type GmailBackfillReport,
+	GmailSyncService,
+} from "./gmail-sync.service";
+import type { GmailBackfillInput } from "./google.contracts";
 
 @Injectable()
 export class GoogleSyncService {
@@ -22,6 +26,10 @@ export class GoogleSyncService {
 		return source === "calendar"
 			? this.calendar.sync(row)
 			: this.gmail.sync(row);
+	}
+
+	async backfillGmail(input: GmailBackfillInput): Promise<GmailBackfillReport> {
+		return this.gmail.backfillPage(input);
 	}
 
 	async runForUser(userId: string): Promise<void> {

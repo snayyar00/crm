@@ -21,6 +21,20 @@ export const calendarEventInput = z.object({
 	eventId: z.string(),
 });
 
+export const gmailBackfillInput = z
+	.object({
+		email: z.string().trim().toLowerCase().email(),
+		after: z.coerce.date(),
+		before: z.coerce.date(),
+		dryRun: z.boolean().default(true),
+		pageToken: z.string().min(1).optional(),
+	})
+	.refine((input) => input.after < input.before, {
+		message: "after must be earlier than before",
+		path: ["after"],
+	});
+
+export type GmailBackfillInput = z.infer<typeof gmailBackfillInput>;
 export type SetAutoCreateInput = z.infer<typeof setAutoCreateInput>;
 export type SuppressDomainInput = z.infer<typeof suppressDomainInput>;
 

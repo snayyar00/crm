@@ -51,6 +51,22 @@ export class ActivityStampService {
 		]);
 	}
 
+	async backdate(
+		target: Pick<ActivityTarget, "companyId" | "contactId">,
+		at: Date,
+	): Promise<void> {
+		await Promise.all([
+			target.companyId
+				? this.db
+						.$executeRaw`UPDATE "company" SET "lastActivityAt" = ${at} WHERE id = ${target.companyId} AND ("lastActivityAt" IS NULL OR "lastActivityAt" < ${at})`
+				: null,
+			target.contactId
+				? this.db
+						.$executeRaw`UPDATE "contact" SET "lastActivityAt" = ${at} WHERE id = ${target.contactId} AND ("lastActivityAt" IS NULL OR "lastActivityAt" < ${at})`
+				: null,
+		]);
+	}
+
 	async recompute(target: ActivityTarget): Promise<void> {
 		if (target.companyId) {
 			const { _max } = await this.db.activity.aggregate({
