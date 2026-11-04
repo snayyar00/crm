@@ -22,6 +22,15 @@ const ctx = {
 			}) {
 				writeFileSync(path, content);
 			},
+			async writeBinaryFile({
+				path,
+				content,
+			}: {
+				path: string;
+				content: Uint8Array;
+			}) {
+				writeFileSync(path, content);
+			},
 			async run({ command }: { command: string }) {
 				try {
 					const stdout = execSync(command, {

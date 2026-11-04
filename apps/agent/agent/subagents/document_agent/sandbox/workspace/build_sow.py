@@ -517,7 +517,8 @@ def main():
 
     chrome = find_chrome()
     result = subprocess.run(
-        [chrome, "--headless", "--disable-gpu", "--no-pdf-header-footer",
+        [chrome, "--headless", "--disable-gpu", "--no-sandbox",
+         "--disable-dev-shm-usage", "--no-pdf-header-footer",
          "--export-tagged-pdf", "--generate-pdf-document-outline",
          f"--print-to-pdf={output_pdf}", f"file://{html_path}"],
         capture_output=True, text=True, timeout=60,

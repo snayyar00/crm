@@ -1,5 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { buildPdfIntoSandbox } from "../../../lib/document-pdf";
 
 const blockSchema = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("p"), text: z.string() }),
@@ -81,35 +82,24 @@ export default defineTool({
 			sections: input.sections,
 		};
 
-		const sandbox = await ctx.getSandbox();
-		const specPath = sandbox.resolvePath("doc_spec.json");
-		await sandbox.writeTextFile({
-			path: specPath,
-			content: JSON.stringify(spec, null, 2),
+		const built = await buildPdfIntoSandbox({
+			sandbox: await ctx.getSandbox(),
+			script: "build_doc.py",
+			config: spec,
+			sandboxFile: input.filename,
 		});
 
-		const outputPdf = sandbox.resolvePath(input.filename);
-		const result = await sandbox.run({
-			command: `python3 build_doc.py "${specPath}" "${outputPdf}"`,
-		});
-
-		if (result.exitCode !== 0) {
+		if (!built.ok) {
 			return {
-				error: "PDF generation failed",
-				stderr: result.stderr,
-				stdout: result.stdout,
+				error: built.error,
+				stderr: built.stderr,
+				stdout: built.stdout,
 			};
 		}
 
 		return {
-			pdf_path: outputPdf,
-			pdf_bytes: Number(
-				result.stdout
-					.split("\n")
-					.find((l) => l.startsWith("PDF_SIZE:"))
-					?.split(":")[1]
-					?.trim() ?? "0",
-			),
+			pdf_path: built.pdfPath,
+			pdf_bytes: built.pdfBytes,
 			title: input.title,
 		};
 	},

@@ -1,6 +1,7 @@
 import { db } from "@crm/db";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { buildPdfIntoSandbox } from "../../../lib/document-pdf";
 
 type Deliverable = { name: string; desc: string };
 
@@ -386,38 +387,24 @@ export default defineTool({
 			];
 		}
 
-		const sandbox = await ctx.getSandbox();
-		const configPath = sandbox.resolvePath("sow_config.json");
-		await sandbox.writeTextFile({
-			path: configPath,
-			content: JSON.stringify(finalConfig, null, 2),
+		const built = await buildPdfIntoSandbox({
+			sandbox: await ctx.getSandbox(),
+			script: "build_sow.py",
+			config: finalConfig,
+			sandboxFile: `${sowRef}.pdf`,
 		});
 
-		const outputPdf = sandbox.resolvePath(`${sowRef}.pdf`);
-
-		const result = await sandbox.run({
-			command: `python3 build_sow.py "${configPath}" "${outputPdf}"`,
-		});
-
-		if (result.exitCode !== 0) {
+		if (!built.ok) {
 			return {
-				error: "PDF generation failed",
-				stderr: result.stderr,
-				stdout: result.stdout,
+				error: built.error,
+				stderr: built.stderr,
+				stdout: built.stdout,
 			};
 		}
 
 		return {
-			pdf_path: outputPdf,
-			pdf_bytes: result.stdout.includes("PDF_SIZE:")
-				? Number(
-						result.stdout
-							.split("\n")
-							.find((l) => l.startsWith("PDF_SIZE:"))
-							?.split(":")[1]
-							?.trim() ?? "0",
-					)
-				: undefined,
+			pdf_path: built.pdfPath,
+			pdf_bytes: built.pdfBytes,
 			sow_ref: sowRef,
 			client_name: clientName,
 			fee: Number(deal.amount ?? 0),

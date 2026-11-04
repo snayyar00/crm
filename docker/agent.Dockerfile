@@ -12,6 +12,7 @@ FROM node:24-slim AS runtime
 #       gate and rolls back with "/bin/sh: 1: curl: not found".
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates curl \
+    python3 chromium fonts-liberation \
  && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g bun@1.4.0
