@@ -46,9 +46,26 @@ export const agentManifestAction = z.discriminatedUnion("type", [
 	}),
 ]);
 
+export function isTimeZone(value: string): boolean {
+	try {
+		new Intl.DateTimeFormat("en-US", { timeZone: value });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+const scheduleTimeZone = z.string().refine(isTimeZone);
+const scheduleDaysOfWeek = z
+	.array(z.number().int().min(0).max(6))
+	.min(1)
+	.max(7);
+
 export const agentScheduleTriggerConfig = z.object({
 	nextRunAt: z.string(),
 	intervalMinutes: z.number().int().min(AGENT_TRIGGER_INTERVAL_MINUTES.min),
+	timeZone: scheduleTimeZone.optional(),
+	daysOfWeek: scheduleDaysOfWeek.optional(),
 });
 
 export const agentEventTriggerConfig = z.object({
@@ -179,6 +196,8 @@ export const agentTriggerConfig = z.object({
 		)
 		.catch(AGENT_TRIGGER_INTERVAL_MINUTES.fallback),
 	event: z.enum(CRM_EVENT_TYPES).nullable().catch(null),
+	timeZone: scheduleTimeZone.nullable().catch(null),
+	daysOfWeek: scheduleDaysOfWeek.nullable().catch(null),
 });
 
 export type AgentTriggerConfig = z.infer<typeof agentTriggerConfig>;
@@ -186,6 +205,8 @@ export type AgentTriggerConfig = z.infer<typeof agentTriggerConfig>;
 const UNREADABLE_TRIGGER_CONFIG: AgentTriggerConfig = {
 	intervalMinutes: AGENT_TRIGGER_INTERVAL_MINUTES.fallback,
 	event: null,
+	timeZone: null,
+	daysOfWeek: null,
 };
 
 export function readAgentTriggerConfig(value: unknown): AgentTriggerConfig {

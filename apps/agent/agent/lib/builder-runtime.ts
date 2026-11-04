@@ -10,9 +10,11 @@ import { WORKSPACE_ID } from "@crm/db/workspace";
 import {
 	AGENT_ACTION_TYPES,
 	type AgentManifestMcpGrant,
+	isTimeZone,
 } from "@crm/validation/agent-manifest";
 import { z } from "zod";
 import { actionDependency } from "./agent-actions";
+import { DAY_MINUTES, localDayOfWeek } from "./schedule-calendar";
 import { requestStaleSlackInventorySync } from "./slack-people";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -44,6 +46,8 @@ export type DraftTrigger = {
 	event?: CrmEventType | null;
 	nextRunAt?: string | null;
 	intervalMinutes?: number | null;
+	timeZone?: string | null;
+	daysOfWeek?: number[] | null;
 };
 
 export type DraftAction =
@@ -242,6 +246,8 @@ export async function saveBuilderDraft(
 				? {
 						intervalMinutes: trigger.intervalMinutes,
 						nextRunAt: scheduleDate(trigger, now)?.toISOString(),
+						timeZone: trigger.timeZone ?? undefined,
+						daysOfWeek: trigger.daysOfWeek ?? undefined,
 					}
 				: trigger.type === "EVENT"
 					? { event: trigger.event }
@@ -594,6 +600,7 @@ async function validateDraft(
 					"A scheduled trigger needs a recurrence from 1 minute to 1 year.",
 				);
 			}
+			issues.push(...scheduleCalendarIssues(trigger, next));
 		}
 		if (trigger.type === "EVENT") {
 			if (!trigger.event) {
@@ -958,6 +965,32 @@ function uniqueResources(resources: BuilderResource[]): BuilderResource[] {
 			]),
 		).values(),
 	];
+}
+
+function scheduleCalendarIssues(trigger: DraftTrigger, next: number): string[] {
+	const { timeZone, daysOfWeek, intervalMinutes } = trigger;
+	if (!timeZone) {
+		return daysOfWeek
+			? ["A scheduled trigger with days of the week needs a time zone."]
+			: [];
+	}
+	if (!isTimeZone(timeZone)) {
+		return [`${timeZone} is not a supported time zone.`];
+	}
+	if (!intervalMinutes || intervalMinutes % DAY_MINUTES !== 0) {
+		return ["A time zone schedule needs a recurrence of whole days."];
+	}
+	if (!daysOfWeek) return [];
+	if (intervalMinutes !== DAY_MINUTES) {
+		return ["A schedule with days of the week needs a daily recurrence."];
+	}
+	if (
+		Number.isFinite(next) &&
+		!daysOfWeek.includes(localDayOfWeek(new Date(next), timeZone))
+	) {
+		return ["The next run time must fall on one of the chosen days."];
+	}
+	return [];
 }
 
 function scheduleDate(trigger: DraftTrigger, now: Date): Date | null {

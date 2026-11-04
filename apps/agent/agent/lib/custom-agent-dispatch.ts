@@ -12,6 +12,7 @@ import {
 	lockAgentRun,
 	runTerminalEventId,
 } from "./run-state";
+import { nextScheduledRun } from "./schedule-calendar";
 import type { LeasedTask } from "./tasks";
 
 const BUILDER_BATCH = DISPATCH.builder.batch;
@@ -272,10 +273,11 @@ export async function queueDueAgentRuns(now = new Date()): Promise<number> {
 	for (const trigger of triggers) {
 		if (!trigger.nextRunAt) continue;
 		const scheduledAt = trigger.nextRunAt;
-		const intervalMinutes = readAgentTriggerConfig(
-			trigger.config,
-		).intervalMinutes;
-		const nextRunAt = advance(scheduledAt, intervalMinutes, now);
+		const nextRunAt = nextScheduledRun(
+			scheduledAt,
+			readAgentTriggerConfig(trigger.config),
+			now,
+		);
 		const idempotencyKey = `${trigger.id}:${scheduledAt.toISOString()}`;
 		const claimed = await db.$transaction(async (tx) => {
 			const [agent] = await tx.$queryRaw<Array<{ id: string; status: string }>>`
@@ -913,15 +915,6 @@ type BuilderDeliveryAttachment = {
 	mediaType: string;
 	content: Uint8Array;
 };
-
-function advance(from: Date, intervalMinutes: number, now: Date): Date {
-	const intervalMs = intervalMinutes * 60_000;
-	const missed = Math.max(
-		1,
-		Math.floor((now.getTime() - from.getTime()) / intervalMs) + 1,
-	);
-	return new Date(from.getTime() + missed * intervalMs);
-}
 
 function idFromToken(token: string | undefined, marker: string): string | null {
 	if (!token) return null;

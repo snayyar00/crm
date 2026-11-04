@@ -79,7 +79,11 @@ name, wording, optional polish, or another choice that can be safely represented
 in the reviewable draft. Keep the question prompt to one plain sentence without
 Markdown, bullets, or option explanations. Put each choice explanation in that
 option's description. For a schedule, calculate a future `nextRunAt` from the
-supplied current time and provide its recurrence in minutes.
+supplied current time and provide its recurrence in minutes. When the user names
+a time zone or specific days, also set `timeZone` to the IANA name and
+`daysOfWeek` to the chosen days, 0 for Sunday to 6 for Saturday. Use whole days
+for the recurrence, and 1440 minutes with `daysOfWeek`. The run then keeps the
+local time of `nextRunAt` across daylight saving changes and skips other days.
 
 Choose the record scope explicitly. Use `SELECTED` only for the exact tagged CRM
 records reported by `inspect_context`. Use `WORKSPACE` only when the user clearly

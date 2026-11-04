@@ -345,6 +345,10 @@ delegation paths for custom agents.
   version instructions at `session.started`, then calls `inspect_run` for the manifest
   and current run state. Every runner tool also checks the `team-agent` purpose and
   revalidates scope and action permission.
+- **A schedule can keep local time.** A trigger with `timeZone` advances by local
+  days, so 9am stays 9am across daylight saving, and `daysOfWeek` skips the other
+  days. Both are optional: a trigger without them adds `intervalMinutes`, and old
+  rows read exactly as before.
 - **`list_open_tasks` is the runner's only task list.** A task can sit on a contact,
   a company or a deal, so a run that walks deals misses the rest. The tool filters to
   the approved scope, reports `total` beside the page, and marks nothing reviewed.

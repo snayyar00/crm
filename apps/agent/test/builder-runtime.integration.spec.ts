@@ -512,6 +512,136 @@ describe("builder persistence", () => {
 		});
 	});
 
+	describe("calendar schedules", () => {
+		const weekdayRun = "2030-01-07T14:00:00.000Z";
+		const draft = (schedule: {
+			nextRunAt: string;
+			intervalMinutes: number;
+			timeZone?: string;
+			daysOfWeek?: number[];
+		}) => ({
+			name: "Weekday digest",
+			description: "Summarize the week.",
+			instructions: "Write one summary on each scheduled day.",
+			triggers: [
+				{
+					type: "SCHEDULE" as const,
+					name: "Weekday digest",
+					summary: "Run at 9am Eastern on weekdays.",
+					...schedule,
+				},
+			],
+			recordScope: "WORKSPACE" as const,
+			resources: [],
+			actions: [
+				{
+					type: "run.summary" as const,
+					provider: "crm" as const,
+					summary: "Write a summary.",
+				},
+			],
+			access: ["Read workspace CRM records"],
+		});
+		const conversationId = async () => {
+			const conversation = await db.agentConversation.create({
+				data: { kind: "BUILDER", userId },
+				select: { id: true },
+			});
+			conversationIds.push(conversation.id);
+			return conversation.id;
+		};
+
+		it("stores the time zone and days on the trigger and the manifest", async () => {
+			const saved = await saveBuilderDraft(
+				await conversationId(),
+				userId,
+				draft({
+					nextRunAt: weekdayRun,
+					intervalMinutes: 1440,
+					timeZone: "America/New_York",
+					daysOfWeek: [1, 2, 3, 4, 5],
+				}),
+			);
+			if (!saved.saved) throw new Error("Calendar draft was not saved");
+
+			const config = {
+				nextRunAt: weekdayRun,
+				intervalMinutes: 1440,
+				timeZone: "America/New_York",
+				daysOfWeek: [1, 2, 3, 4, 5],
+			};
+			expect(
+				await db.agentTrigger.findFirstOrThrow({
+					where: { versionId: saved.versionId },
+					select: { config: true },
+				}),
+			).toEqual({ config });
+			expect(
+				await db.agentVersion.findUniqueOrThrow({
+					where: { id: saved.versionId },
+					select: { manifest: true },
+				}),
+			).toMatchObject({ manifest: { triggers: [{ config }] } });
+		});
+
+		it("refuses a calendar schedule it cannot honor", async () => {
+			const invalid = [
+				{
+					schedule: {
+						nextRunAt: weekdayRun,
+						intervalMinutes: 1440,
+						timeZone: "Mars/Olympus",
+					},
+					issue: "Mars/Olympus is not a supported time zone.",
+				},
+				{
+					schedule: {
+						nextRunAt: weekdayRun,
+						intervalMinutes: 1440,
+						daysOfWeek: [1],
+					},
+					issue: "A scheduled trigger with days of the week needs a time zone.",
+				},
+				{
+					schedule: {
+						nextRunAt: weekdayRun,
+						intervalMinutes: 60,
+						timeZone: "America/New_York",
+					},
+					issue: "A time zone schedule needs a recurrence of whole days.",
+				},
+				{
+					schedule: {
+						nextRunAt: weekdayRun,
+						intervalMinutes: 2880,
+						timeZone: "America/New_York",
+						daysOfWeek: [1],
+					},
+					issue: "A schedule with days of the week needs a daily recurrence.",
+				},
+				{
+					schedule: {
+						nextRunAt: "2030-01-06T14:00:00.000Z",
+						intervalMinutes: 1440,
+						timeZone: "America/New_York",
+						daysOfWeek: [1, 2, 3, 4, 5],
+					},
+					issue: "The next run time must fall on one of the chosen days.",
+				},
+			];
+
+			for (const { schedule, issue } of invalid) {
+				const saved = await saveBuilderDraft(
+					await conversationId(),
+					userId,
+					draft(schedule),
+				);
+				expect(saved).toMatchObject({ saved: false });
+				expect(JSON.stringify(saved)).toContain(issue);
+			}
+		});
+	});
+
 	it("fails closed on unsupported integrations and ambiguous record scope", async () => {
 		const conversation = await db.agentConversation.create({
 			data: { kind: "BUILDER", userId },

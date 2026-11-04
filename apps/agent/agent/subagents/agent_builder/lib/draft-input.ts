@@ -24,6 +24,12 @@ const trigger = z.discriminatedUnion("type", [
 		...triggerMetadata,
 		nextRunAt: z.string(),
 		intervalMinutes: z.number().int().min(1).max(525_600),
+		timeZone: z.string().trim().min(1).max(64).optional(),
+		daysOfWeek: z
+			.array(z.number().int().min(0).max(6))
+			.min(1)
+			.max(7)
+			.optional(),
 	}),
 	z.object({
 		type: z.literal("EVENT"),
