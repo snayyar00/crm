@@ -26,7 +26,7 @@ async function main() {
 
 	if (!JOINS_FOR_REAL) {
 		console.log(
-			"NOTE  Comp AI joins no channel in this run. A join is permanent.",
+			"NOTE  WebAbility joins no channel in this run. A join is permanent.",
 		);
 	}
 
@@ -56,7 +56,7 @@ async function main() {
 		record(
 			"joins a public channel",
 			true,
-			"skipped: Comp AI is already in every public channel",
+			"skipped: WebAbility is already in every public channel",
 		);
 	} else if (!JOINS_FOR_REAL) {
 		record("joins a public channel", true, SKIPPED);
@@ -76,7 +76,7 @@ async function main() {
 		record(
 			"private channel behaves as the grant allows",
 			true,
-			"skipped: no private channel is visible to Comp AI",
+			"skipped: no private channel is visible to WebAbility",
 		);
 	} else if (!JOINS_FOR_REAL) {
 		record("private channel behaves as the grant allows", true, SKIPPED);
@@ -122,8 +122,8 @@ async function main() {
 		"workspace grant present",
 		canInvite,
 		canInvite
-			? "a user token lets Comp AI add itself to a private channel"
-			: "no user token, so Comp AI cannot add itself to a private channel",
+			? "a user token lets WebAbility add itself to a private channel"
+			: "no user token, so WebAbility cannot add itself to a private channel",
 	);
 
 	const failed = results.filter((row) => !row.ok).length;

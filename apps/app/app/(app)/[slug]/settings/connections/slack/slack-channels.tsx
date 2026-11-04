@@ -32,7 +32,7 @@ import {
 import { useSlackChannels } from "@/components/slack/use-slack-channels";
 import { useTRPC } from "@/lib/trpc/client";
 
-const INVITE_COMMAND = "/invite @Comp AI";
+const INVITE_COMMAND = "/invite @WebAbility";
 
 export function SlackChannels() {
 	const trpc = useTRPC();
@@ -47,10 +47,10 @@ export function SlackChannels() {
 				setAsking(null);
 				toast.success(
 					result.alreadyJoined
-						? "Comp AI is already in there."
+						? "WebAbility is already in there."
 						: result.queued
-							? "Comp AI is joining."
-							: "Ask someone inside to invite Comp AI.",
+							? "WebAbility is joining."
+							: "Ask someone inside to invite WebAbility.",
 				);
 			},
 			onError: (error) => toast.error(error.message),
@@ -75,7 +75,7 @@ export function SlackChannels() {
 
 	return (
 		<PageSection
-			title="Channels Comp AI can reach"
+			title="Channels WebAbility can reach"
 			description="Agents pick from this list."
 			action={
 				<Button
@@ -90,7 +90,8 @@ export function SlackChannels() {
 		>
 			{channels.stalled ? (
 				<p className="text-warning text-xs">
-					Comp AI is not reading Slack right now. The list can be out of date.
+					WebAbility is not reading Slack right now. The list can be out of
+					date.
 				</p>
 			) : null}
 
@@ -117,7 +118,7 @@ export function SlackChannels() {
 							? "Reading the channel list from Slack…"
 							: query
 								? `No channel matches “${query}”.`
-								: "No channels yet. Comp AI reads the list from Slack after it connects."}
+								: "No channels yet. WebAbility reads the list from Slack after it connects."}
 					</p>
 				}
 				onAdd={(channel) => void joinAction.run(channel.id)}
@@ -180,13 +181,13 @@ function AskDialog({
 				<AlertDialogHeader>
 					<AlertDialogTitle>
 						{canInviteItself
-							? `Add Comp AI to #${channel.name}?`
-							: "Ask someone to add Comp AI"}
+							? `Add WebAbility to #${channel.name}?`
+							: "Ask someone to add WebAbility"}
 					</AlertDialogTitle>
 					<AlertDialogDescription>
 						{canInviteItself
-							? `It is a private channel, so Comp AI joins as you. Same as typing the invite yourself. Everyone in the channel sees it join. It reads nothing until you turn a permission on.`
-							: `We cannot add Comp AI to a private channel yet. Someone already in #${channel.name} has to run this.`}
+							? `It is a private channel, so WebAbility joins as you. Same as typing the invite yourself. Everyone in the channel sees it join. It reads nothing until you turn a permission on.`
+							: `We cannot add WebAbility to a private channel yet. Someone already in #${channel.name} has to run this.`}
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 
@@ -205,7 +206,7 @@ function AskDialog({
 						onClick={canInviteItself ? onConfirm : () => void copyThenConfirm()}
 					>
 						<AsyncButtonContent pendingLabel="Adding…" status={status}>
-							{canInviteItself ? "Add Comp AI" : "Copy and mark as asked"}
+							{canInviteItself ? "Add WebAbility" : "Copy and mark as asked"}
 						</AsyncButtonContent>
 					</Button>
 				</AlertDialogFooter>

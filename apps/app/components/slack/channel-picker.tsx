@@ -126,10 +126,10 @@ export function ChannelPicker({
 }
 
 function describe(channel: PickerChannel, canInviteItself: boolean): string {
-	if (channel.isMember) return "Comp AI is in";
+	if (channel.isMember) return "WebAbility is in";
 	if (!channel.classified) return "Not read from Slack yet";
-	if (!channel.isPrivate) return "Comp AI can join this one";
-	if (canInviteItself) return "Private. Comp AI joins as you";
+	if (!channel.isPrivate) return "WebAbility can join this one";
+	if (canInviteItself) return "Private. WebAbility joins as you";
 	if (channel.inviteRequestedAt) return "Private. Waiting on an invite";
-	return "Private. Someone inside has to invite Comp AI";
+	return "Private. Someone inside has to invite WebAbility";
 }

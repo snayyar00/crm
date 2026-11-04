@@ -57,8 +57,8 @@ export function CreateChannelDialog({
 				<DialogHeader>
 					<DialogTitle>Create a channel</DialogTitle>
 					<DialogDescription>
-						Comp AI makes it in Slack and joins it. You can put the agent in it
-						straight after.
+						WebAbility makes it in Slack and joins it. You can put the agent in
+						it straight after.
 					</DialogDescription>
 				</DialogHeader>
 

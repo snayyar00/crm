@@ -14,9 +14,9 @@ export async function runSlackChannelJoin(
 
 	if (outcome.joined) {
 		return outcome.already
-			? `Comp AI was already in #${channelName}.`
-			: `Comp AI joined #${channelName}.`;
+			? `WebAbility was already in #${channelName}.`
+			: `WebAbility joined #${channelName}.`;
 	}
 
-	return `Comp AI could not join #${channelName}. ${outcome.reason}`;
+	return `WebAbility could not join #${channelName}. ${outcome.reason}`;
 }

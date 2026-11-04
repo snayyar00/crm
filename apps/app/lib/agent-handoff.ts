@@ -15,8 +15,8 @@ export function handoffResources(handoff: Handoff) {
 						id: `slack:channel:${handoff.channel.id}`,
 						label: `#${handoff.channel.name}`,
 						detail: handoff.channel.isMember
-							? "Comp AI is a member"
-							: "Comp AI is not in this channel yet",
+							? "WebAbility is a member"
+							: "WebAbility is not in this channel yet",
 					},
 				]
 			: []),

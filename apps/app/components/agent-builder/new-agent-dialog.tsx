@@ -152,8 +152,8 @@ export function NewAgentDialog({ children }: { children: React.ReactNode }) {
 						<p className="text-muted-foreground text-xs">
 							{channel
 								? channel.isMember
-									? `Comp AI is already in #${channel.name}.`
-									: `Comp AI is not in #${channel.name} yet. It joins when you create this.`
+									? `WebAbility is already in #${channel.name}.`
+									: `WebAbility is not in #${channel.name} yet. It joins when you create this.`
 								: "Leave this empty and the builder will ask."}
 						</p>
 					</div>
