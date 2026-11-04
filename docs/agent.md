@@ -345,6 +345,9 @@ delegation paths for custom agents.
   version instructions at `session.started`, then calls `inspect_run` for the manifest
   and current run state. Every runner tool also checks the `team-agent` purpose and
   revalidates scope and action permission.
+- **`list_open_tasks` is the runner's only task list.** A task can sit on a contact,
+  a company or a deal, so a run that walks deals misses the rest. The tool filters to
+  the approved scope, reports `total` beside the page, and marks nothing reviewed.
 - **Stopping a run is a row, not a signal.** `agents.cancelRun` settles the
   `AgentRun` to `CANCELLED` inside one transaction — terminal event, outstanding
   `AgentAction` rows, audit entry — and *then* pokes

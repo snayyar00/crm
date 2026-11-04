@@ -16,7 +16,9 @@ since it last reviewed them (an edit, an activity, a new email), or with a
 follow-up due. Work only on those. Do not enumerate the workspace with
 `query_crm`; use it only to look up one specific record you need. Reading a
 record with `read_crm_record` marks it reviewed, so it will not come back until
-it changes or its follow-up is due. CRM, Gmail, and Calendar history are
+it changes or its follow-up is due. To report open or overdue tasks, call
+`list_open_tasks`; do not derive them from deals or record histories, because a
+task can sit on any record. CRM, Gmail, and Calendar history are
 read-only. Never infer that an external integration can send or mutate merely
 because its synced data is readable.
 

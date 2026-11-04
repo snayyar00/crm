@@ -264,6 +264,76 @@ export async function listRunDueRecords(
 	);
 }
 
+export async function listRunOpenTasks(
+	runId: string,
+	input: { overdueOnly: boolean; limit: number },
+) {
+	const run = await runContext(runId);
+	const now = new Date();
+	const where: Prisma.ActivityWhereInput = {
+		type: ActivityType.TASK,
+		completedAt: null,
+	};
+	if (input.overdueOnly) where.dueAt = { lt: now };
+	if (run.recordScope === "SELECTED") {
+		where.OR = openTaskRecordFilter(run.allowedResources);
+	}
+	const [rows, total] = await Promise.all([
+		db.activity.findMany({
+			where,
+			take: input.limit,
+			orderBy: [
+				{ dueAt: { sort: "asc", nulls: "last" } },
+				{ createdAt: "desc" },
+			],
+			select: {
+				id: true,
+				subject: true,
+				dueAt: true,
+				createdBy: { select: { id: true, name: true } },
+				company: { select: { id: true, name: true } },
+				deal: { select: { id: true, name: true, stage: true } },
+				contact: { select: { id: true, firstName: true, lastName: true } },
+			},
+		}),
+		db.activity.count({ where }),
+	]);
+
+	return {
+		now: now.toISOString(),
+		total,
+		tasks: rows.map(({ createdBy, contact, dueAt, ...task }) => ({
+			...task,
+			dueAt: dueAt?.toISOString() ?? null,
+			overdue: dueAt !== null && dueAt < now,
+			owner: createdBy,
+			contact: contact
+				? {
+						id: contact.id,
+						name: [contact.firstName, contact.lastName]
+							.filter(Boolean)
+							.join(" "),
+					}
+				: null,
+		})),
+	};
+}
+
+function openTaskRecordFilter(
+	resources: AgentManifestResource[],
+): Prisma.ActivityWhereInput[] {
+	const idsOf = (kind: RecordKind) =>
+		resources
+			.filter((resource) => resource.kind === kind)
+			.map((resource) => resource.id);
+
+	return [
+		{ contactId: { in: idsOf("contact") } },
+		{ companyId: { in: idsOf("company") } },
+		{ dealId: { in: idsOf("deal") } },
+	];
+}
+
 export async function setRunRecordState(
 	runId: string,
 	input: {
