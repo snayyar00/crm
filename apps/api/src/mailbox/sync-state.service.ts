@@ -79,6 +79,28 @@ export class SyncStateService {
 		});
 	}
 
+	async reopenReconnected(
+		userId: string,
+		sources: readonly SyncSource[],
+		reconnectedAt: Date,
+	): Promise<number> {
+		const { count } = await this.db.mailboxSync.updateMany({
+			where: {
+				userId,
+				source: { in: [...sources] },
+				status: GoogleSyncStatus.NEEDS_RECONNECT,
+				updatedAt: { lt: reconnectedAt },
+			},
+			data: {
+				status: GoogleSyncStatus.IDLE,
+				lastError: null,
+				retryAfter: null,
+			},
+		});
+
+		return count;
+	}
+
 	async markRunning(id: string): Promise<void> {
 		await this.db.mailboxSync.update({
 			where: { id },

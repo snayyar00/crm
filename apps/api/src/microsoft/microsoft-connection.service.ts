@@ -71,10 +71,21 @@ export class MicrosoftConnectionService {
 	}
 
 	async onConnected(userId: string): Promise<void> {
-		const [granted, existing] = await Promise.all([
+		const [granted, existing, accountUpdatedAt] = await Promise.all([
 			this.tokens.grantedScopes(userId, MICROSOFT_PROVIDER_ID),
 			this.state.listForUser(userId, MICROSOFT_SYNC_SOURCES),
+			this.tokens.accountUpdatedAt(userId, MICROSOFT_PROVIDER_ID),
 		]);
+
+		if (accountUpdatedAt) {
+			await this.state.reopenReconnected(
+				userId,
+				MICROSOFT_SYNC_SOURCES.filter((source) =>
+					granted.has(SCOPE_FOR_SOURCE[source]),
+				),
+				accountUpdatedAt,
+			);
+		}
 
 		const known = new Set(existing.map((row) => row.source));
 

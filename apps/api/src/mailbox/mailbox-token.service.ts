@@ -40,6 +40,18 @@ export class MailboxTokenService {
 		return parseScopes(account?.scope);
 	}
 
+	async accountUpdatedAt(
+		userId: string,
+		providerId: MailboxProviderId,
+	): Promise<Date | null> {
+		const account = await this.db.account.findFirst({
+			where: { userId, providerId },
+			select: { updatedAt: true },
+		});
+
+		return account?.updatedAt ?? null;
+	}
+
 	async isConnected(userId: string, source: SyncSource): Promise<boolean> {
 		const scopes = await this.grantedScopes(
 			userId,
