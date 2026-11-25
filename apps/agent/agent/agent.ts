@@ -4,6 +4,7 @@ import { onTelemetryProblem, syncVersion } from "@crm/telemetry";
 import { defineAgent, defineDynamic } from "eve";
 import { logCapabilities } from "./lib/capabilities";
 import { selectedModel } from "./lib/model";
+import { morphStepEvents } from "./lib/morph";
 
 void logCapabilities();
 
@@ -13,7 +14,10 @@ void syncVersion();
 
 export default defineAgent({
 	model: defineDynamic({
-		events: { "session.started": () => selectedModel() },
+		events: {
+			"session.started": () => selectedModel(),
+			...morphStepEvents(),
+		},
 	}),
 	limits: {
 		// Delegated runner sessions draw from this root budget, so it must be

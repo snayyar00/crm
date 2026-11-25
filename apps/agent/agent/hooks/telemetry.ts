@@ -3,6 +3,7 @@ import { readAgentModel } from "@crm/db/settings";
 import { agentError, modelError } from "@crm/telemetry";
 import { defineHook } from "eve/hooks";
 import { z } from "zod";
+import { MORPH_MODEL_ID, morphModelFrom } from "../lib/morph";
 
 type SessionPrincipal = {
 	readonly attributes?: Readonly<Record<string, string | readonly string[]>>;
@@ -14,6 +15,10 @@ let modelId: string | null = null;
 
 async function configuredModel(): Promise<string | null> {
 	if (modelId) return modelId;
+	if (morphModelFrom(process.env)) {
+		modelId = `morph/${MORPH_MODEL_ID}`;
+		return modelId;
+	}
 
 	try {
 		modelId = (await readAgentModel(db)).id;
