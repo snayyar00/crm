@@ -4,7 +4,7 @@ import { onTelemetryProblem, syncVersion } from "@crm/telemetry";
 import { defineAgent, defineDynamic } from "eve";
 import { logCapabilities } from "./lib/capabilities";
 import { selectedModel } from "./lib/model";
-import { morphStepEvents } from "./lib/morph";
+import { morphStepHandler } from "./lib/morph";
 
 void logCapabilities();
 
@@ -16,7 +16,7 @@ export default defineAgent({
 	model: defineDynamic({
 		events: {
 			"session.started": () => selectedModel(),
-			...morphStepEvents(),
+			"step.started": morphStepHandler(() => selectedModel()),
 		},
 	}),
 	limits: {

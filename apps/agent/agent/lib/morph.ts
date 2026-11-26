@@ -52,14 +52,17 @@ export function morphStep(env: Env = process.env): MorphSelection | null {
 }
 
 /**
- * The `step.started` handler, only when the key is set. eve fails the turn when a
- * model handler returns null, so without the key there is no step handler at all
- * and the session selection stands. Coolify sets the key in the process env at
- * start, so reading it when the agent module loads is enough.
+ * The `step.started` handler. Register it on every agent unconditionally: eve
+ * compiles each agent's model event names at build time (eve build) and only
+ * dispatches the compiled ones, and the image is built without MORPH_API_KEY.
+ * So the key is read here, when each step starts. With it, Morph answers the
+ * step; without it, the step keeps the agent's session selection (`fallback`,
+ * the same function as its "session.started" handler), because eve fails the
+ * turn when a model handler returns nothing.
  */
-export function morphStepEvents(env: Env = process.env): {
-	"step.started"?: () => MorphSelection;
-} {
-	const selection = morphStep(env);
-	return selection ? { "step.started": () => selection } : {};
+export function morphStepHandler<A extends unknown[], S>(
+	fallback: (...args: A) => S | Promise<S>,
+	env: Env = process.env,
+): (...args: A) => Promise<MorphSelection | S> {
+	return async (...args: A) => morphStep(env) ?? fallback(...args);
 }
