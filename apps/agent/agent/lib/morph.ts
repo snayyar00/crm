@@ -51,16 +51,36 @@ export function morphStep(env: Env = process.env): MorphSelection | null {
 		: null;
 }
 
-type StepContext = { readonly model: { readonly id: string } | null };
+type StepContext = {
+	readonly model: { readonly id: string } | null;
+	readonly session: { readonly id: string };
+};
 
-export function morphStepHandler<E, C, S>(
+export const SESSION_SELECTIONS_KEPT = 1_000;
+
+export function morphStepHandler<E, C, S extends { model: unknown }>(
 	fallback: (event: E, ctx: C) => S | Promise<S>,
 	env: Env = process.env,
 ): (
 	event: E,
 	ctx: C & StepContext,
 ) => Promise<MorphSelection | { model: string } | S> {
-	return async (event, ctx) =>
-		morphStep(env) ??
-		(ctx.model ? { model: ctx.model.id } : fallback(event, ctx));
+	const sessions = new Map<string, { model: string } | S>();
+	return async (event, ctx) => {
+		const morph = morphStep(env);
+		if (morph) return morph;
+		const kept = sessions.get(ctx.session.id);
+		if (kept) return kept;
+		const fresh = await fallback(event, ctx);
+		const selection =
+			ctx.model && fresh.model !== ctx.model.id
+				? { model: ctx.model.id }
+				: fresh;
+		if (sessions.size >= SESSION_SELECTIONS_KEPT) {
+			const oldest = sessions.keys().next().value;
+			if (oldest !== undefined) sessions.delete(oldest);
+		}
+		sessions.set(ctx.session.id, selection);
+		return selection;
+	};
 }
