@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
+import { MORPH } from "./morph-config";
 
 /**
  * Morph Ultra: a flat monthly plan, so agent steps on it cost nothing per token.
@@ -51,15 +52,34 @@ export function morphStep(env: Env = process.env): MorphSelection | null {
 		: null;
 }
 
-/**
- * The `step.started` handler, only when the key is set. eve fails the turn when a
- * model handler returns null, so without the key there is no step handler at all
- * and the session selection stands. Coolify sets the key in the process env at
- * start, so reading it when the agent module loads is enough.
- */
-export function morphStepEvents(env: Env = process.env): {
-	"step.started"?: () => MorphSelection;
-} {
-	const selection = morphStep(env);
-	return selection ? { "step.started": () => selection } : {};
+type StepContext = {
+	readonly model: { readonly id: string } | null;
+	readonly session: { readonly id: string };
+};
+
+export function morphStepHandler<E, C, S extends { model: unknown }>(
+	fallback: (event: E, ctx: C) => S | Promise<S>,
+	env: Env = process.env,
+): (
+	event: E,
+	ctx: C & StepContext,
+) => Promise<MorphSelection | { model: string } | S> {
+	const sessions = new Map<string, { model: string } | S>();
+	return async (event, ctx) => {
+		const morph = morphStep(env);
+		if (morph) return morph;
+		const kept = sessions.get(ctx.session.id);
+		if (kept) return kept;
+		const fresh = await fallback(event, ctx);
+		const selection =
+			ctx.model && fresh.model !== ctx.model.id
+				? { model: ctx.model.id }
+				: fresh;
+		if (sessions.size >= MORPH.sessionSelectionsKept) {
+			const oldest = sessions.keys().next().value;
+			if (oldest !== undefined) sessions.delete(oldest);
+		}
+		sessions.set(ctx.session.id, selection);
+		return selection;
+	};
 }

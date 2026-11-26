@@ -1,6 +1,6 @@
 import { defineAgent, defineDynamic } from "eve";
 import { selectedModel } from "../../lib/model";
-import { morphStepEvents } from "../../lib/morph";
+import { morphStepHandler } from "../../lib/morph";
 
 export default defineAgent({
 	description:
@@ -8,7 +8,7 @@ export default defineAgent({
 	model: defineDynamic({
 		events: {
 			"session.started": () => selectedModel(),
-			...morphStepEvents(),
+			"step.started": morphStepHandler(() => selectedModel()),
 		},
 	}),
 	limits: {

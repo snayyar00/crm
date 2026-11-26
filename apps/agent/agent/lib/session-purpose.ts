@@ -4,7 +4,7 @@ export type SessionPurpose = "builder" | "team-agent" | "research";
 
 type SessionAttributes = Readonly<Record<string, string | readonly string[]>>;
 
-type PurposeContext = {
+export type PurposeContext = {
 	readonly session: {
 		readonly auth: {
 			readonly current: {
