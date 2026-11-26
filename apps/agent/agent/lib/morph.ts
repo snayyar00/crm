@@ -51,18 +51,16 @@ export function morphStep(env: Env = process.env): MorphSelection | null {
 		: null;
 }
 
-/**
- * The `step.started` handler. Register it on every agent unconditionally: eve
- * compiles each agent's model event names at build time (eve build) and only
- * dispatches the compiled ones, and the image is built without MORPH_API_KEY.
- * So the key is read here, when each step starts. With it, Morph answers the
- * step; without it, the step keeps the agent's session selection (`fallback`,
- * the same function as its "session.started" handler), because eve fails the
- * turn when a model handler returns nothing.
- */
-export function morphStepHandler<A extends unknown[], S>(
-	fallback: (...args: A) => S | Promise<S>,
+type StepContext = { readonly model: { readonly id: string } | null };
+
+export function morphStepHandler<E, C, S>(
+	fallback: (event: E, ctx: C) => S | Promise<S>,
 	env: Env = process.env,
-): (...args: A) => Promise<MorphSelection | S> {
-	return async (...args: A) => morphStep(env) ?? fallback(...args);
+): (
+	event: E,
+	ctx: C & StepContext,
+) => Promise<MorphSelection | { model: string } | S> {
+	return async (event, ctx) =>
+		morphStep(env) ??
+		(ctx.model ? { model: ctx.model.id } : fallback(event, ctx));
 }

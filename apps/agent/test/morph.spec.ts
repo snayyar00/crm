@@ -36,11 +36,6 @@ describe("morphStep", () => {
 });
 
 describe("morphStepHandler", () => {
-	// eve compiles each agent's model event names at build time (eve build), and
-	// only dispatches the compiled ones. The image is built without MORPH_API_KEY
-	// (it is a runtime env var), so a handler added only "when the key is set" was
-	// never compiled and every step went to the Vercel gateway (prod, 2026-11-25:
-	// crm-agent step "in 9.5k out 405" = gateway row 9.5K input / 405 output).
 	const fallback = async () => ({
 		model: "deepseek/deepseek-v4-flash",
 		modelContextWindowTokens: 1_000_000,
@@ -50,19 +45,34 @@ describe("morphStepHandler", () => {
 		expect(typeof morphStepHandler(fallback, {})).toBe("function");
 	});
 
+	const sessionCtx = { model: { id: "deepseek/deepseek-v4-pro" } };
+	const noModelYet = { model: null };
+
 	it("reads the key when a step starts, not when the agent module loads", async () => {
 		const env: Record<string, string | undefined> = {};
 		const step = morphStepHandler(fallback, env);
 		env.MORPH_API_KEY = "test-key";
-		const selection = await step(undefined, undefined);
+		const selection = await step(undefined, sessionCtx);
 		expect(typeof selection.model === "object" && selection.model.modelId).toBe(
 			MORPH_MODEL_ID,
 		);
 	});
 
-	it("without a key at step time, the step keeps the session's own selection", async () => {
+	it("without a key, the step keeps the session's model, not the current settings row", async () => {
+		let settingsReads = 0;
+		const settings = async () => {
+			settingsReads++;
+			return fallback();
+		};
+		const step = morphStepHandler(settings, {});
+		const selection = await step(undefined, sessionCtx);
+		expect(selection.model).toBe("deepseek/deepseek-v4-pro");
+		expect(settingsReads).toBe(0);
+	});
+
+	it("without a key or a session model, the step asks the session handler", async () => {
 		const step = morphStepHandler(fallback, {});
-		const selection = await step(undefined, undefined);
+		const selection = await step(undefined, noModelYet);
 		expect(selection.model).toBe("deepseek/deepseek-v4-flash");
 	});
 });

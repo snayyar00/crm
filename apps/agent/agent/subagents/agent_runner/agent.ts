@@ -8,7 +8,6 @@ import {
 	purposeOf,
 } from "../../lib/session-purpose";
 
-/** The model this run's deployed version chose (the default for other sessions). */
 async function runnerModel(_event: unknown, ctx: PurposeContext) {
 	if (purposeOf(ctx) !== "team-agent") {
 		return {
