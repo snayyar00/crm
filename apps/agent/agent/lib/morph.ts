@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
+import { MORPH } from "./morph-config";
 
 /**
  * Morph Ultra: a flat monthly plan, so agent steps on it cost nothing per token.
@@ -56,8 +57,6 @@ type StepContext = {
 	readonly session: { readonly id: string };
 };
 
-export const SESSION_SELECTIONS_KEPT = 1_000;
-
 export function morphStepHandler<E, C, S extends { model: unknown }>(
 	fallback: (event: E, ctx: C) => S | Promise<S>,
 	env: Env = process.env,
@@ -76,7 +75,7 @@ export function morphStepHandler<E, C, S extends { model: unknown }>(
 			ctx.model && fresh.model !== ctx.model.id
 				? { model: ctx.model.id }
 				: fresh;
-		if (sessions.size >= SESSION_SELECTIONS_KEPT) {
+		if (sessions.size >= MORPH.sessionSelectionsKept) {
 			const oldest = sessions.keys().next().value;
 			if (oldest !== undefined) sessions.delete(oldest);
 		}

@@ -5,8 +5,8 @@ import {
 	morphModelFrom,
 	morphStep,
 	morphStepHandler,
-	SESSION_SELECTIONS_KEPT,
 } from "../agent/lib/morph";
+import { MORPH } from "../agent/lib/morph-config";
 
 describe("morphModelFrom", () => {
 	it("is null without a Morph key, so the agent keeps its gateway model", () => {
@@ -120,14 +120,14 @@ describe("morphStepHandler", () => {
 			return fallback();
 		}, {});
 		const model = "deepseek/deepseek-v4-flash";
-		for (let i = 0; i <= SESSION_SELECTIONS_KEPT; i++) {
+		for (let i = 0; i <= MORPH.sessionSelectionsKept; i++) {
 			await step(undefined, ctxFor(`b${i}`, model));
 		}
-		expect(reads).toBe(SESSION_SELECTIONS_KEPT + 1);
-		await step(undefined, ctxFor(`b${SESSION_SELECTIONS_KEPT}`, model));
-		expect(reads).toBe(SESSION_SELECTIONS_KEPT + 1);
+		expect(reads).toBe(MORPH.sessionSelectionsKept + 1);
+		await step(undefined, ctxFor(`b${MORPH.sessionSelectionsKept}`, model));
+		expect(reads).toBe(MORPH.sessionSelectionsKept + 1);
 		await step(undefined, ctxFor("b0", model));
-		expect(reads).toBe(SESSION_SELECTIONS_KEPT + 2);
+		expect(reads).toBe(MORPH.sessionSelectionsKept + 2);
 	});
 });
 
